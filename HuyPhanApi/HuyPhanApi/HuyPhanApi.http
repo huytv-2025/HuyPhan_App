@@ -1,0 +1,6 @@
+@HuyPhanApi_HostAddress = http://localhost:5107
+
+GET {{HuyPhanApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
