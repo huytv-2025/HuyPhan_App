@@ -1,0 +1,10 @@
+flutter_native_splash:
+  color: "#00acc1"                  # Màu nền teal đậm (khớp theme app)
+  image: assets/images/app_icon.png  # ← Logo headphone của bạn
+  branding: assets/images/app_icon.png  # (Tùy chọn: logo nhỏ dưới cùng)
+  android_12:
+    image: assets/images/app_icon.png
+    color: "#00acc1"
+  fullscreen: true                  # Toàn màn hình, đẹp mượt
+  info_plist_files:
+    - 'ios/Runner/Info.plist'       # Hỗ trợ iOS tốt hơn
