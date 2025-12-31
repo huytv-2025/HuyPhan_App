@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("HuyPhanApi")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fd1ec92d85c7efbdfa555b96dcbbe978e45e889e")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3c213edb14c72763b8a3decf9f723db8293ae214")]
 [assembly: System.Reflection.AssemblyProductAttribute("HuyPhanApi")]
 [assembly: System.Reflection.AssemblyTitleAttribute("HuyPhanApi")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
