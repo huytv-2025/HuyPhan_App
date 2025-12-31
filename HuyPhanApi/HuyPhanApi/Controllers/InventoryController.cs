@@ -130,7 +130,7 @@ public class InventoryController : ControllerBase
         {
             await using var connection = new SqlConnection(_connectionString);
             await connection.OpenAsync();
-            await using var transaction = await connection.BeginTransactionAsync();
+            await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
 
             const string sql = @"
                 IF EXISTS (SELECT 1 FROM QRInventory WHERE Ivcode = @Ivcode)

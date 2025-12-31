@@ -72,3 +72,9 @@ C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\HuyP
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\HuyPhanApi.pdb
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\obj\Debug\net10.0\HuyPhanApi.genruntimeconfig.cache
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\obj\Debug\net10.0\ref\HuyPhanApi.dll
+C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyphanApi\bin\Debug\net10.0\publish\web.config
+C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyphanApi\bin\Debug\net10.0\publish\appsettings.Development.json
+C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyphanApi\bin\Debug\net10.0\publish\appsettings.json
+C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyphanApi\bin\Debug\net10.0\publish\HuyPhanApi.deps.json
+C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyphanApi\bin\Debug\net10.0\publish\HuyPhanApi.runtimeconfig.json
+C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyphanApi\bin\Debug\net10.0\publish\HuyPhanApi.staticwebassets.endpoints.json
