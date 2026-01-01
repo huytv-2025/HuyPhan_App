@@ -49,5 +49,9 @@
 		<true/>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
-	</dict>
-</plist>
+		<key>NSCameraUsageDescription</key>
+		<string>Huy Phan App cần truy cập camera để quét QR Code sản phẩm</string>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>Huy Phan App cần truy cập microphone để quét QR Code (một số thiết bị yêu cầu)</string>
+			</dict>
+		</plist>
