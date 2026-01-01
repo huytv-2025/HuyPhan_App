@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\dev\\flutter_projects\\huyphan_app\\HuyPhanApi\\HuyPhanApi\\HuyPhanApi.csproj": {}
+    "C:\\dev\\flutter_projects\\huyphan_app\\HuyPhanApi\\HuyPhanAPi\\HuyPhanApi.csproj": {}
   },
   "projects": {
-    "C:\\dev\\flutter_projects\\huyphan_app\\HuyPhanApi\\HuyPhanApi\\HuyPhanApi.csproj": {
+    "C:\\dev\\flutter_projects\\huyphan_app\\HuyPhanApi\\HuyPhanAPi\\HuyPhanApi.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\dev\\flutter_projects\\huyphan_app\\HuyPhanApi\\HuyPhanApi\\HuyPhanApi.csproj",
+        "projectUniqueName": "C:\\dev\\flutter_projects\\huyphan_app\\HuyPhanApi\\HuyPhanAPi\\HuyPhanApi.csproj",
         "projectName": "HuyPhanApi",
-        "projectPath": "C:\\dev\\flutter_projects\\huyphan_app\\HuyPhanApi\\HuyPhanApi\\HuyPhanApi.csproj",
+        "projectPath": "C:\\dev\\flutter_projects\\huyphan_app\\HuyPhanApi\\HuyPhanAPi\\HuyPhanApi.csproj",
         "packagesPath": "C:\\Users\\user\\.nuget\\packages\\",
-        "outputPath": "C:\\dev\\flutter_projects\\huyphan_app\\HuyPhanApi\\HuyPhanApi\\obj\\",
+        "outputPath": "C:\\dev\\flutter_projects\\huyphan_app\\HuyPhanApi\\HuyPhanAPi\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\user\\AppData\\Roaming\\NuGet\\NuGet.Config"
