@@ -59,19 +59,21 @@
     }
 
     void _updateApiUrl() {
-    final ip = _ipController.text.trim();
-    final portText = _portController.text.trim();
+  final ip = _ipController.text.trim();
+  final portText = _portController.text.trim();
 
-    if (ip.isNotEmpty) {
-      if (portText.isNotEmpty) {
-        apiUrl = 'http://$ip:$portText/api/login';
-        AppConfig.baseUrl = 'http://$ip:$portText';
-      } else {
-        apiUrl = 'http://$ip/api/login';           // Port mặc định (ngầm định 80)
-        AppConfig.baseUrl = 'http://$ip';
-      }
+  if (ip.isNotEmpty) {
+    String base;
+    if (portText.isNotEmpty) {
+      base = 'http://$ip:$portText';
+    } else {
+      // Ngrok luôn dùng HTTPS → ép dùng https khi port trống
+      base = ip.startsWith('http') ? ip : 'https://$ip';
     }
+    apiUrl = '$base/api/login';
+    AppConfig.baseUrl = base;
   }
+}
 
     Future<void> _login() async {
       _updateApiUrl();

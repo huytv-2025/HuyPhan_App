@@ -4,11 +4,11 @@ using Microsoft.Data.SqlClient;
 namespace HuyPhanApi.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/login")]
 public class LoginController : ControllerBase
 {
     private readonly string _connectionString = 
-        "Server=.;Database=SMILE_BO;Trusted_Connection=True;TrustServerCertificate=True;";
+        "Server=.;Database=SMILE_BO;User Id=Smile;Password=AnhMinh167TruongDinh;TrustServerCertificate=True;";
 
     [HttpPost]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)

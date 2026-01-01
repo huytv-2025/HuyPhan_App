@@ -8,7 +8,7 @@ namespace HuyPhanApi.Controllers;
 public class InventoryController : ControllerBase
 {
     private readonly string _connectionString = 
-        "Server=.;Database=SMILE_BO;Trusted_Connection=True;TrustServerCertificate=True;";
+        "Server=.;Database=SMILE_BO;User Id=Smile;Password=AnhMinh167TruongDinh;TrustServerCertificate=True;";
 
     // GET: api/inventory?vperiod=...&search=...
     [HttpGet("")]
