@@ -4,6 +4,7 @@
   import 'package:flutter_easyloading/flutter_easyloading.dart';
   import 'package:qr_flutter/qr_flutter.dart';
   import 'package:mobile_scanner/mobile_scanner.dart'; // Thêm package này vào pubspec.yaml: mobile_scanner: ^5.1.1
+  import 'package:image_picker/image_picker.dart';
 
   // Global lưu base URL sau khi login thành công
   class AppConfig {
@@ -603,8 +604,9 @@
   bool isLoading = false;
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _vperiodController = TextEditingController();
-
+  final ImagePicker _picker = ImagePicker();
   String get baseUrl => AppConfig.baseUrl;
+  
 
   // ← SỬA GETTER ĐỂ TRẢ VỀ ĐÚNG KIỂU
   List<Map<String, String>> get filteredList {
@@ -653,11 +655,13 @@
           final List<dynamic> rawData = jsonDecode(response.body);
           setState(() {
           inventoryList = rawData.map<Map<String, String>>((item) => {
-            'Ivcode': item['ivcode']?.toString().trim() ?? '',  // ← ĐÚNG: từ API 'ivcode'
-            'iname': item['iname']?.toString().trim() ?? 'Sản phẩm ${item['ivcode']}',  // ← ĐÚNG: 'iname'
-            'Vend': item['vend']?.toString() ?? '0',  // ← ĐÚNG: 'vend' từ API
+            'Ivcode': item['ivcode']?.toString().trim() ?? '',
+            'iname': item['iname']?.toString().trim() ?? 'Sản phẩm ${item['ivcode']}',
+            'Vend': item['vend']?.toString() ?? '0',
             'QRBarcode': '',
             'Vperiod': item['vperiod']?.toString() ?? '',
+            'unit': item['unit']?.toString().trim() ?? 'Cái',
+            'imagePath': item['imagePath']?.toString().trim() ?? '', // Lấy từ server
           }).toList();
             // Lọc tồn kho > 0
             inventoryList = inventoryList.where((item) {
@@ -720,6 +724,41 @@
         ),
       );
     }
+    Future<void> _pickAndUploadImage(String ivcode) async {
+  final XFile? pickedFile = await _picker.pickImage(
+    source: ImageSource.gallery,
+    maxWidth: 800,
+    imageQuality: 85,
+  );
+
+  if (pickedFile == null) return;
+
+  EasyLoading.show(status: 'Đang tải ảnh lên...');
+
+  try {
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse('${AppConfig.baseUrl}/api/inventory/upload-image'),
+    );
+    request.fields['ivcode'] = ivcode;
+    request.files.add(await http.MultipartFile.fromPath('file', pickedFile.path));
+
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+          if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          _loadInventory(); // Reload để lấy ảnh mới từ server
+          EasyLoading.showSuccess(data['message'] ?? 'Tải ảnh thành công!');
+        }
+      }
+  } catch (e) {
+    EasyLoading.showError('Lỗi kết nối: $e');
+  } finally {
+    EasyLoading.dismiss();
+  }
+}
   Future<void> _generateBatchQR() async {
   final ivcodes = filteredList.where((item) {
     final vendStr = item['Vend'] ?? '0';
@@ -758,12 +797,18 @@
       EasyLoading.showError('Lỗi kết nối: $e');
     }
   }
-    @override
-  Widget build(BuildContext context) {
-    
-    return Column(
+  @override
+Widget build(BuildContext context) {
+  return Scaffold(
+    appBar: AppBar(
+      title: const Text('Cập nhật QR & Ảnh sản phẩm'),
+      backgroundColor: Colors.teal,
+      foregroundColor: Colors.white,
+      elevation: 4,
+    ),
+    body: Column(
       children: [
-        // Search + Vperiod + Refresh + NÚT MỚI
+        // === PHẦN TÌM KIẾM + NÚT LÀM MỚI + TẠO QR HÀNG LOẠT (GIỮ NGUYÊN) ===
         Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -828,66 +873,105 @@
           ),
         ),
 
-          // Bảng dữ liệu
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : filteredList.isEmpty
-                    ? const Center(child: Text('Không có dữ liệu', style: TextStyle(fontSize: 18)))
-                    : SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: DataTable(
-                          headingRowColor: WidgetStateProperty.all(Colors.teal.shade50),
-                          columns: const [
-                            DataColumn(label: Text('Ivcode', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('Iname', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('Vend (Tồn)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                            DataColumn(label: Text('Vperiod', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('QR/Barcode', style: TextStyle(fontWeight: FontWeight.bold))),
-                          ],
-                          rows: filteredList.map((item) {
-                            final String ivcode = item['Ivcode'] ?? '';
-                            final String iname = item['iname'] ?? 'Sản phẩm $ivcode';
-                            final String vend = item['Vend'] ?? '0';
-                            final String vperiod = item['Vperiod'] ?? '';
+        // === BẢNG DỮ LIỆU ===
+        Expanded(
+          child: isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : filteredList.isEmpty
+                  ? const Center(child: Text('Không có dữ liệu', style: TextStyle(fontSize: 18)))
+                  : SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        headingRowColor: WidgetStateProperty.all(Colors.teal.shade50),
+                        columns: const [
+                          DataColumn(label: Text('Mã hàng', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Tên sản phẩm', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Đơn vị', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Tồn kho', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Ảnh', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('QR', style: TextStyle(fontWeight: FontWeight.bold))),
+                        ],
+                        rows: filteredList.map((item) {
+                          final String ivcode = item['Ivcode'] ?? '';
+                          final String iname = item['iname'] ?? 'Sản phẩm $ivcode';
+                          final String vend = item['Vend'] ?? '0';
 
-                            return DataRow(
-                              cells: [
-                                DataCell(Text(ivcode)),
-                                DataCell(Text(iname)),
-                                DataCell(Text(vend, style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold))),
-                                DataCell(Text(vperiod)),
-                                DataCell(
-                                  GestureDetector(
-                                    onTap: () => _showQRDialog(ivcode, item['iname']?.toString().trim() ?? iname, vend),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[200],
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(color: Colors.teal),
-                                      ),
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.qr_code, color: Colors.teal, size: 20),
-                                          SizedBox(width: 8),
-                                          Text('Tạo QR', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
-                                        ],
-                                      ),
+                          return DataRow(
+                            cells: [
+                              DataCell(Text(ivcode)),
+                              DataCell(Text(iname)),
+                              DataCell(Text(item['unit'] ?? 'Cái', style: const TextStyle(color: Colors.indigo, fontWeight: FontWeight.w600))),
+                              DataCell(Text(vend, style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold))),
+                              
+                              // Cột Ảnh
+                              DataCell(
+                                GestureDetector(
+                                  onTap: () => _pickAndUploadImage(ivcode),
+                                  child: Container(
+                                    width: 70,
+                                    height: 70,
+                                    decoration: BoxDecoration(
+                                      border: Border.all(color: Colors.grey.shade400),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: item['imagePath']?.isNotEmpty == true
+                                        ? ClipRRect(
+                                            borderRadius: BorderRadius.circular(10),
+                                            child: Image.network(
+  '${AppConfig.baseUrl}${item['imagePath']}',
+  fit: BoxFit.cover,
+  loadingBuilder: (context, child, progress) {
+    if (progress == null) return child;
+    return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+  },
+  errorBuilder: (context, exception, stackTrace) => const Icon(Icons.error, color: Colors.red),
+),
+                                          )
+                                        : const Center(
+                                            child: Column(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Icon(Icons.add_photo_alternate, color: Colors.grey, size: 30),
+                                                Text('Thêm ảnh', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                              ],
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                              ),
+
+                              // Cột QR
+                              DataCell(
+                                GestureDetector(
+                                  onTap: () => _showQRDialog(ivcode, iname, vend),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[200],
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(color: Colors.teal),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.qr_code, color: Colors.teal, size: 20),
+                                        SizedBox(width: 8),
+                                        Text('Tạo QR', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+                                      ],
                                     ),
                                   ),
                                 ),
-                              ],
-                            );
-                          }).toList(),
-                        ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
                       ),
-          ),
-        ],
-      );
-    }
-
+                    ),
+        ),
+      ],
+    ),
+  );
+}
     @override
     void dispose() {
       _searchController.dispose();

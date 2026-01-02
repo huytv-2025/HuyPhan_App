@@ -9,6 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+    
 
   cupertino_icons: ^1.0.8
   image_picker: ^1.1.2       # Chọn ảnh từ gallery/camera
@@ -19,7 +20,7 @@ dependencies:
   flutter_easyloading: ^3.0.5   # Loading đẹp khi gọi API
   qr_flutter: ^4.1.0 
   mobile_scanner: ^5.1.1           # Tạo và hiển thị mã QR chuẩn quốc tế (rất quan trọng!)
-
+image_picker: ^1.0.7
 dev_dependencies:
   flutter_test:
     sdk: flutter
