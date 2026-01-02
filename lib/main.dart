@@ -43,7 +43,7 @@
   class _LoginScreenState extends State<LoginScreen> {
     final _clerkIdController = TextEditingController();
     final _securityCodeController = TextEditingController();
-    final _ipController = TextEditingController(text: '10.0.2.2');
+    final _ipController = TextEditingController(text: 'https://overtimidly-ungoggled-isaura.ngrok-free.dev');
     final _portController = TextEditingController();
 
     String _errorMessage = '';
@@ -107,8 +107,8 @@
         final data = jsonDecode(response.body);
 
         if (response.statusCode == 200 && data['success'] == true) {
-          // Lưu base URL để dùng cho các API khác
-          AppConfig.baseUrl = 'http://${_ipController.text.trim()}:${_portController.text.trim()}';
+          
+          
 
           if (mounted) {
             Navigator.pushReplacement(
@@ -124,11 +124,7 @@
       } catch (e) {
         setState(() {
           _errorMessage = 'Không kết nối được server.\n'
-              'Kiểm tra:\n'
-              '- IP và Port đúng chưa?\n'
-              '- Server .NET đang chạy?\n'
-              '- Mạng ổn định?\n'
-              'Lỗi: $e';
+                  'Lỗi: $e';
         });
       } finally {
         if (mounted) {
@@ -467,48 +463,49 @@
     String get baseUrl => AppConfig.baseUrl;
 
     Future<void> _searchInventory(String qrData) async {
-    if (qrData.startsWith('HPAPP:')) {
-      final ivcode = qrData.substring(6).trim();
+  if (qrData.startsWith('HPAPP:')) {
+    final ivcode = qrData.substring(6).trim();
 
-      try {
-        final response = await http.post(
-          Uri.parse('$baseUrl/api/inventory/search'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'QRCode': ivcode}),
-        ).timeout(const Duration(seconds: 15));
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/inventory/search'),  // ← ĐÚNG ROUTE
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'QRCode': ivcode,  // ← SỬA: ĐÚNG TÊN FIELD 'QRCode' (không phải ivcode)
+        }),
+      ).timeout(const Duration(seconds: 15));
 
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          if (data['success'] == true) {
-            final item = data['data'];
-            setState(() {
-              _scanResult = 
-                  'Mã hàng: ${item['ivcode']}\n'
-                  'Tên SP: ${item['iname']}\n'
-                  'Tên SP: ${item['IName'] ?? 'Không có tên'}\n'
-                  'Tồn kho: ${item['vend']} cái';
-            });
-          } else {
-            setState(() {
-              _scanResult = data['message'] ?? 'Không tìm thấy sản phẩm';
-            });
-          }
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          final item = data['data'];
+          setState(() {
+            _scanResult = 
+                'Mã hàng: ${item['ivcode']}\n'
+                'Tên SP: ${item['iname'] ?? item['IName'] ?? 'Không có tên'}\n'  // ← SỬA: fallback IName
+                'Tồn kho: ${item['vend']} cái';
+          });
         } else {
           setState(() {
-            _scanResult = 'Lỗi server: ${response.statusCode}';
+            _scanResult = data['message'] ?? 'Không tìm thấy sản phẩm';
           });
         }
-      } catch (e) {
+      } else {
         setState(() {
-          _scanResult = 'Lỗi kết nối: $e';
+          _scanResult = 'Lỗi server: ${response.statusCode} - ${response.body}';  // ← DEBUG: in response body
         });
       }
-    } else {
+    } catch (e) {
       setState(() {
-        _scanResult = 'QR không hợp lệ\n(Yêu cầu định dạng: HPAPP:mã_hàng)';
+        _scanResult = 'Lỗi kết nối: $e';
       });
     }
+  } else {
+    setState(() {
+      _scanResult = 'QR không hợp lệ\n(Yêu cầu định dạng: HPAPP:mã_hàng)';
+    });
   }
+}
 
     void _switchCamera() {
       cameraController.switchCamera();
@@ -611,13 +608,13 @@
 
   // ← SỬA GETTER ĐỂ TRẢ VỀ ĐÚNG KIỂU
   List<Map<String, String>> get filteredList {
-    final query = _searchController.text.toLowerCase().trim();
-    return inventoryList.where((item) {
-      final String ivcode = item['Ivcode'] ?? '';
-      final String iname = item['iname'] ?? '';
-      return ivcode.toLowerCase().contains(query) || iname.toLowerCase().contains(query);
-    }).toList();
-  }
+  final query = _searchController.text.toLowerCase().trim();
+  return inventoryList.where((item) {
+    final String ivcode = item['Ivcode'] ?? '';  // ← 'Ivcode' (viết hoa I)
+    final String iname = item['iname'] ?? '';    // ← 'iname' (viết thường)
+    return ivcode.toLowerCase().contains(query) || iname.toLowerCase().contains(query);
+  }).toList();
+}
     @override
     void initState() {
       super.initState();
@@ -656,12 +653,12 @@
           final List<dynamic> rawData = jsonDecode(response.body);
           setState(() {
           inventoryList = rawData.map<Map<String, String>>((item) => {
-          'Ivcode': item['ivcode']?.toString().trim() ?? '',
-          'iname': item['iname']?.toString().trim() ?? 'Sản phẩm ${item['ivcode']?.toString().trim() ?? 'Unknown'}',
-          'Vend': item['vend']?.toString() ?? '0',
-          'QRBarcode': '',
-          'Vperiod': item['vperiod']?.toString() ?? '',
-        }).toList();
+            'Ivcode': item['ivcode']?.toString().trim() ?? '',  // ← ĐÚNG: từ API 'ivcode'
+            'iname': item['iname']?.toString().trim() ?? 'Sản phẩm ${item['ivcode']}',  // ← ĐÚNG: 'iname'
+            'Vend': item['vend']?.toString() ?? '0',  // ← ĐÚNG: 'vend' từ API
+            'QRBarcode': '',
+            'Vperiod': item['vperiod']?.toString() ?? '',
+          }).toList();
             // Lọc tồn kho > 0
             inventoryList = inventoryList.where((item) {
               final double vend = double.tryParse(item['Vend'] ?? '0') ?? 0;

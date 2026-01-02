@@ -71,6 +71,8 @@ public class InventoryController : ControllerBase
     [HttpPost("search")]
     public async Task<IActionResult> SearchByQR([FromBody] QRRequest request)
     {
+        Console.WriteLine($">>> RECEIVED QRCode: '{request?.QRCode}'");
+    
         if (string.IsNullOrWhiteSpace(request?.QRCode))
         {
             return BadRequest(new { success = false, message = "Vui lòng nhập hoặc quét QR/Barcode" });
