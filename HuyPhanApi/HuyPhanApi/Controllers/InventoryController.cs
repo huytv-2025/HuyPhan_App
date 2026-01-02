@@ -7,7 +7,7 @@ namespace HuyPhanApi.Controllers;
 [Route("api/[controller]")]
 public class InventoryController : ControllerBase
 {
-    private readonly string _connectionString = 
+    private readonly string _connectionString =
         "Server=.;Database=SMILE_BO;User Id=Smile;Password=AnhMinh167TruongDinh;TrustServerCertificate=True;";
 
     // GET: api/inventory?vperiod=...&search=...
@@ -23,10 +23,17 @@ public class InventoryController : ControllerBase
                 SELECT 
                     i.VICode, 
                     i.VEnd, 
+                    i.RVC,                    -- Thêm cột RVC gốc
                     i.VPeriod, 
-                    dbo.fTCVNToUnicode(id.IName) AS IName
+                    dbo.fTCVNToUnicode(id.IName) AS IName,
+                    ISNULL(u.UName, 'Cái') AS UnitName,
+                    dbo.fTCVNToUnicode(de.RVCName) AS RVCName,  -- ← THÊM RVCName
+                    q.ImagePath
                 FROM Inventory i
                 LEFT JOIN Itemdef id ON LTRIM(RTRIM(i.VICode)) = LTRIM(RTRIM(id.Icode))
+                LEFT JOIN Unitdef u ON id.Unit = u.UCode
+                LEFT JOIN QRInventory q ON LTRIM(RTRIM(i.VICode)) = q.Ivcode
+                LEFT JOIN DefRVCList de ON de.RVCNo = i.RVC     -- ← JOIN DefRVCList
                 WHERE 1 = 1";
 
             if (!string.IsNullOrEmpty(vperiod))
@@ -53,9 +60,13 @@ public class InventoryController : ControllerBase
                 list.Add(new
                 {
                     ivcode = reader["VICode"]?.ToString()?.Trim() ?? "",
+                    rvc = reader["RVC"]?.ToString()?.Trim() ?? "",       // ← THÊM RVC
+                    rvcname = reader["RVCName"]?.ToString()?.Trim() ?? "", // ← THÊM RVCName
                     vend = reader["VEnd"]?.ToString() ?? "0",
                     vperiod = reader["VPeriod"]?.ToString() ?? "",
-                    iname = reader["IName"]?.ToString()?.Trim() ?? ""
+                    iname = reader["IName"]?.ToString()?.Trim() ?? "",
+                    unit = reader["UnitName"]?.ToString()?.Trim() ?? "Cái",
+                    imagePath = reader["ImagePath"]?.ToString()?.Trim() ?? ""
                 });
             }
 
@@ -67,12 +78,12 @@ public class InventoryController : ControllerBase
         }
     }
 
-    // POST: api/inventory/search
+    // POST: api/inventory/search (Quét QR - thêm RVCName)
     [HttpPost("search")]
     public async Task<IActionResult> SearchByQR([FromBody] QRRequest request)
     {
         Console.WriteLine($">>> RECEIVED QRCode: '{request?.QRCode}'");
-    
+
         if (string.IsNullOrWhiteSpace(request?.QRCode))
         {
             return BadRequest(new { success = false, message = "Vui lòng nhập hoặc quét QR/Barcode" });
@@ -86,10 +97,13 @@ public class InventoryController : ControllerBase
             var query = @"
                 SELECT 
                     i.VICode, 
+                    i.RVC,                         -- ← THÊM RVC
                     i.VEnd, 
-                    dbo.fTCVNToUnicode(id.IName) AS IName
+                    dbo.fTCVNToUnicode(id.IName) AS IName,
+                    dbo.fTCVNToUnicode(de.RVCName) AS RVCName  -- ← THÊM RVCName
                 FROM Inventory i
                 LEFT JOIN Itemdef id ON LTRIM(RTRIM(i.VICode)) = LTRIM(RTRIM(id.Icode))
+                LEFT JOIN DefRVCList de ON de.RVCNo = i.RVC    -- ← JOIN DefRVCList
                 WHERE LTRIM(RTRIM(i.VICode)) = @QRCode";
 
             await using var command = new SqlCommand(query, connection);
@@ -105,6 +119,8 @@ public class InventoryController : ControllerBase
                     data = new
                     {
                         ivcode = reader["VICode"]?.ToString()?.Trim() ?? "",
+                        rvc = reader["RVC"]?.ToString()?.Trim() ?? "",       // ← THÊM RVC
+                        rvcname = reader["RVCName"]?.ToString()?.Trim() ?? "Không có RVC", // ← THÊM RVCName
                         vend = reader["VEnd"]?.ToString() ?? "0",
                         iname = reader["IName"]?.ToString()?.Trim() ?? "Không có tên"
                     }
@@ -172,16 +188,74 @@ public class InventoryController : ControllerBase
             return StatusCode(500, new { success = false, message = "Lỗi server: " + ex.Message });
         }
     }
-}
 
-// Model classes - đặt ngoài controller
-public class QRRequest
-{
-    public string QRCode { get; set; } = string.Empty;
-}
+    // POST: api/inventory/upload-image
+    [HttpPost("upload-image")]
+    public async Task<IActionResult> UploadImage([FromForm] IFormFile file, [FromForm] string ivcode)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(new { success = false, message = "Chưa chọn ảnh" });
 
-public class GenerateBatchRequest
-{
-    public List<string> Ivcodes { get; set; } = new();
-    public string? CreatedBy { get; set; }
+        if (string.IsNullOrWhiteSpace(ivcode))
+            return BadRequest(new { success = false, message = "Thiếu mã hàng" });
+
+        try
+        {
+            // Tạo thư mục lưu ảnh nếu chưa có
+            var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "products");
+            Directory.CreateDirectory(uploadsFolder);
+
+            // Đặt tên file duy nhất để tránh trùng
+            var fileName = $"{ivcode.Trim()}_{DateTime.Now:yyyyMMddHHmmss}{Path.GetExtension(file.FileName)}";
+            var filePath = Path.Combine(uploadsFolder, fileName);
+
+            // Lưu file vào server
+            await using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            var imageUrl = $"/images/products/{fileName}";
+
+            // Cập nhật đường dẫn ảnh vào bảng QRInventory
+            await using var connection = new SqlConnection(_connectionString);
+            await connection.OpenAsync();
+
+            var sql = @"
+                IF EXISTS (SELECT 1 FROM QRInventory WHERE Ivcode = @Ivcode)
+                    UPDATE QRInventory SET ImagePath = @ImagePath WHERE Ivcode = @Ivcode
+                ELSE
+                    INSERT INTO QRInventory (Ivcode, QRCode, ImagePath, CreatedBy, CreatedDate, IsActive)
+                    VALUES (@Ivcode, 'HPAPP:' + @Ivcode, @ImagePath, 'App', GETDATE(), 1)";
+
+            await using var cmd = new SqlCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@Ivcode", ivcode.Trim());
+            cmd.Parameters.AddWithValue("@ImagePath", imageUrl);
+
+            await cmd.ExecuteNonQueryAsync();
+
+            return Ok(new 
+            { 
+                success = true, 
+                message = "Tải ảnh lên thành công!", 
+                imageUrl 
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Lỗi khi tải ảnh: " + ex.Message });
+        }
+    }
+
+    // ------------------ Model Classes (nested) ------------------
+    public class QRRequest
+    {
+        public string QRCode { get; set; } = string.Empty;
+    }
+
+    public class GenerateBatchRequest
+    {
+        public List<string> Ivcodes { get; set; } = new();
+        public string? CreatedBy { get; set; }
+    }
 }

@@ -445,110 +445,117 @@
     }
   }
 
-  // ================== TRANG QUÉT QR - ĐÃ HOÀN CHỈNH VỚI CHUYỂN CAMERA ==================
-  class QRScanScreen extends StatefulWidget {
-    const QRScanScreen({super.key});
+  // ================== TRANG QUÉT QR - HOÀN CHỈNH VỚI ẢNH SẢN PHẨM ==================
+class QRScanScreen extends StatefulWidget {
+  const QRScanScreen({super.key});
 
-    @override
-    State<QRScanScreen> createState() => _QRScanScreenState();
-  }
-
-  class _QRScanScreenState extends State<QRScanScreen> {
-    MobileScannerController cameraController = MobileScannerController(
-      facing: CameraFacing.back,
-      torchEnabled: false,
-    );
-    bool _isScanning = true;
-    String? _scanResult;
-
-    String get baseUrl => AppConfig.baseUrl;
-
-    Future<void> _searchInventory(String qrData) async {
-  if (qrData.startsWith('HPAPP:')) {
-    final ivcode = qrData.substring(6).trim();
-
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/inventory/search'),  // ← ĐÚNG ROUTE
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'QRCode': ivcode,  // ← SỬA: ĐÚNG TÊN FIELD 'QRCode' (không phải ivcode)
-        }),
-      ).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          final item = data['data'];
-          setState(() {
-            _scanResult = 
-                'Mã hàng: ${item['ivcode']}\n'
-                'Tên SP: ${item['iname'] ?? item['IName'] ?? 'Không có tên'}\n'  // ← SỬA: fallback IName
-                'Tồn kho: ${item['vend']} cái';
-          });
-        } else {
-          setState(() {
-            _scanResult = data['message'] ?? 'Không tìm thấy sản phẩm';
-          });
-        }
-      } else {
-        setState(() {
-          _scanResult = 'Lỗi server: ${response.statusCode} - ${response.body}';  // ← DEBUG: in response body
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _scanResult = 'Lỗi kết nối: $e';
-      });
-    }
-  } else {
-    setState(() {
-      _scanResult = 'QR không hợp lệ\n(Yêu cầu định dạng: HPAPP:mã_hàng)';
-    });
-  }
+  @override
+  State<QRScanScreen> createState() => _QRScanScreenState();
 }
 
-    void _switchCamera() {
-      cameraController.switchCamera();
-    }
+class _QRScanScreenState extends State<QRScanScreen> {
+  MobileScannerController cameraController = MobileScannerController(
+    facing: CameraFacing.back,
+    torchEnabled: false,
+  );
+  bool _isScanning = true;
+  String? _scanResult;
+  Map<String, dynamic>? itemData; // ← Biến lưu toàn bộ data từ API (bao gồm imagePath)
 
-    @override
-    Widget build(BuildContext context) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Quét QR Code'),
-          backgroundColor: Colors.teal,
-          foregroundColor: Colors.white,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.flip_camera_ios),
-              onPressed: _switchCamera,
-              tooltip: 'Chuyển camera trước/sau',
-            ),
-          ],
-        ),
-        body: Column(
-          children: [
-            Expanded(
-              flex: 5,
-              child: MobileScanner(
-                controller: cameraController,
-                onDetect: (capture) {
-                  final List<Barcode> barcodes = capture.barcodes;
-                  if (_isScanning && barcodes.isNotEmpty) {
-                    final qrData = barcodes.first.rawValue ?? '';
-                    if (qrData.isNotEmpty) {
-                      setState(() {
-                        _isScanning = false;
-                      });
-                      _searchInventory(qrData);
-                    }
+  String get baseUrl => AppConfig.baseUrl;
+
+  Future<void> _searchInventory(String qrData) async {
+    if (qrData.startsWith('HPAPP:')) {
+      final ivcode = qrData.substring(6).trim();
+
+      try {
+        final response = await http.post(
+          Uri.parse('$baseUrl/api/inventory/search'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'QRCode': ivcode}),
+        ).timeout(const Duration(seconds: 15));
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          if (data['success'] == true) {
+            final item = data['data'];
+            itemData = item; // ← Lưu data để hiển thị ảnh
+
+            setState(() {
+              _scanResult =
+                  'Mã hàng: ${item['ivcode']}\n'
+                  'RVC: ${item['rvcname'] ?? item['rvc'] ?? 'Không có'}\n'
+                  'Tên SP: ${item['iname'] ?? 'Không có tên'}\n'
+                  'Tồn kho: ${item['vend']} cái';
+            });
+          } else {
+            setState(() {
+              _scanResult = data['message'] ?? 'Không tìm thấy sản phẩm';
+              itemData = null;
+            });
+          }
+        } else {
+          setState(() {
+            _scanResult = 'Lỗi server: ${response.statusCode}';
+            itemData = null;
+          });
+        }
+      } catch (e) {
+        setState(() {
+          _scanResult = 'Lỗi kết nối: $e';
+          itemData = null;
+        });
+      }
+    } else {
+      setState(() {
+        _scanResult = 'QR không hợp lệ\n(Yêu cầu định dạng: HPAPP:mã_hàng)';
+        itemData = null;
+      });
+    }
+  }
+
+  void _switchCamera() {
+    cameraController.switchCamera();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Quét QR Code'),
+        backgroundColor: Colors.teal,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.flip_camera_ios),
+            onPressed: _switchCamera,
+            tooltip: 'Chuyển camera trước/sau',
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            flex: 5,
+            child: MobileScanner(
+              controller: cameraController,
+              onDetect: (capture) {
+                final List<Barcode> barcodes = capture.barcodes;
+                if (_isScanning && barcodes.isNotEmpty) {
+                  final qrData = barcodes.first.rawValue ?? '';
+                  if (qrData.isNotEmpty) {
+                    setState(() {
+                      _isScanning = false;
+                    });
+                    _searchInventory(qrData);
                   }
-                },
-              ),
+                }
+              },
             ),
-            Expanded(
-              flex: 2,
+          ),
+          Expanded(
+            flex: 2,
+            child: SingleChildScrollView(
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -556,18 +563,71 @@
                     if (_scanResult != null)
                       Padding(
                         padding: const EdgeInsets.all(16.0),
-                        child: SelectableText(
-                          _scanResult!,
-                          style: const TextStyle(fontSize: 18, color: Colors.black87),
-                          textAlign: TextAlign.center,
+                        child: Card(
+                          elevation: 8,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          child: Padding(
+                            padding: const EdgeInsets.all(20.0),
+                            child: Column(
+                            children: [
+    // === ẢNH SẢN PHẨM - FIX TRIỆT ĐỂ NULL SAFETY ===
+Builder(builder: (context) {
+  // Copy itemData vào biến local để Dart cho phép promotion
+  final Map<String, dynamic>? localItemData = itemData;
+
+  if (localItemData == null) {
+    return const Icon(Icons.image_not_supported, size: 100, color: Colors.grey);
+  }
+
+  // Bây giờ Dart sẽ promotion localItemData thành non-null
+  final dynamic imagePathValue = localItemData['imagePath'];
+
+  if (imagePathValue is! String || imagePathValue.toString().trim().isEmpty) {
+    return const Icon(Icons.image_not_supported, size: 100, color: Colors.grey);
+  }
+
+  final String imageUrl = '${AppConfig.baseUrl}${imagePathValue.toString().trim()}';
+
+  return ClipRRect(
+    borderRadius: BorderRadius.circular(12),
+    child: Image.network(
+      imageUrl,
+      width: 200,
+      height: 200,
+      fit: BoxFit.cover,
+      loadingBuilder: (context, child, progress) {
+        return const Center(
+          child: CircularProgressIndicator(color: Colors.teal),
+        );
+      },
+      errorBuilder: (context, error, stackTrace) {
+        return const Icon(Icons.image_not_supported, size: 100, color: Colors.grey);
+      },
+    ),
+  );
+}),
+    const SizedBox(height: 20),
+
+                                // === THÔNG TIN TEXT ===
+                                SelectableText(
+                                  _scanResult!,
+                                  style: const TextStyle(fontSize: 18, color: Colors.black87),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
+
                     const SizedBox(height: 20),
+
                     ElevatedButton.icon(
                       onPressed: () {
                         setState(() {
                           _isScanning = true;
                           _scanResult = null;
+                          itemData = null; // Reset ảnh
                         });
                         cameraController.start();
                       },
@@ -579,17 +639,18 @@
                 ),
               ),
             ),
-          ],
-        ),
-      );
-    }
-
-    @override
-    void dispose() {
-      cameraController.dispose();
-      super.dispose();
-    }
+          ),
+        ],
+      ),
+    );
   }
+
+  @override
+  void dispose() {
+    cameraController.dispose();
+    super.dispose();
+  }
+}
 
   // ================== TRANG CẬP NHẬT QR - MỚI ==================
   class QRUpdateScreen extends StatefulWidget {
@@ -655,19 +716,16 @@
           final List<dynamic> rawData = jsonDecode(response.body);
           setState(() {
           inventoryList = rawData.map<Map<String, String>>((item) => {
-            'Ivcode': item['ivcode']?.toString().trim() ?? '',
-            'iname': item['iname']?.toString().trim() ?? 'Sản phẩm ${item['ivcode']}',
-            'Vend': item['vend']?.toString() ?? '0',
-            'QRBarcode': '',
-            'Vperiod': item['vperiod']?.toString() ?? '',
-            'unit': item['unit']?.toString().trim() ?? 'Cái',
-            'imagePath': item['imagePath']?.toString().trim() ?? '', // Lấy từ server
-          }).toList();
-            // Lọc tồn kho > 0
-            inventoryList = inventoryList.where((item) {
-              final double vend = double.tryParse(item['Vend'] ?? '0') ?? 0;
-              return vend > 0;
-            }).toList();
+        'Ivcode': item['ivcode']?.toString().trim() ?? '',
+        'rvc': item['rvc']?.toString().trim() ?? '',           // ← THÊM
+        'rvcname': item['rvcname']?.toString().trim() ?? '',   // ← THÊM
+        'iname': item['iname']?.toString().trim() ?? 'Sản phẩm ${item['ivcode']}',
+        'Vend': item['vend']?.toString() ?? '0',
+        'QRBarcode': '',
+        'Vperiod': item['vperiod']?.toString() ?? '',
+        'unit': item['unit']?.toString().trim() ?? 'Cái',
+        'imagePath': item['imagePath']?.toString().trim() ?? '',
+      }).toList();
           });
         } else {
           throw Exception('Lỗi server: ${response.statusCode}');
@@ -885,6 +943,7 @@ Widget build(BuildContext context) {
                         headingRowColor: WidgetStateProperty.all(Colors.teal.shade50),
                         columns: const [
                           DataColumn(label: Text('Mã hàng', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('RVC', style: TextStyle(fontWeight: FontWeight.bold))),
                           DataColumn(label: Text('Tên sản phẩm', style: TextStyle(fontWeight: FontWeight.bold))),
                           DataColumn(label: Text('Đơn vị', style: TextStyle(fontWeight: FontWeight.bold))),
                           DataColumn(label: Text('Tồn kho', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -899,47 +958,58 @@ Widget build(BuildContext context) {
                           return DataRow(
                             cells: [
                               DataCell(Text(ivcode)),
+                              DataCell(Text(item['rvcname'] ?? item['rvc'] ?? '-', style: TextStyle(color: Colors.purple, fontWeight: FontWeight.w500))), // ← THÊM
                               DataCell(Text(iname)),
                               DataCell(Text(item['unit'] ?? 'Cái', style: const TextStyle(color: Colors.indigo, fontWeight: FontWeight.w600))),
                               DataCell(Text(vend, style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold))),
                               
                               // Cột Ảnh
-                              DataCell(
-                                GestureDetector(
-                                  onTap: () => _pickAndUploadImage(ivcode),
-                                  child: Container(
-                                    width: 70,
-                                    height: 70,
-                                    decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.grey.shade400),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: item['imagePath']?.isNotEmpty == true
-                                        ? ClipRRect(
-                                            borderRadius: BorderRadius.circular(10),
-                                            child: Image.network(
-  '${AppConfig.baseUrl}${item['imagePath']}',
-  fit: BoxFit.cover,
-  loadingBuilder: (context, child, progress) {
-    if (progress == null) return child;
-    return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-  },
-  errorBuilder: (context, exception, stackTrace) => const Icon(Icons.error, color: Colors.red),
+                              // Cột Ảnh - THAY TOÀN BỘ PHẦN NÀY
+DataCell(
+  GestureDetector(
+    onTap: () => _pickAndUploadImage(ivcode),
+    child: Container(
+      width: 80,  // Tăng kích thước một chút cho đẹp
+      height: 80,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade400),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: item['imagePath']?.isNotEmpty == true
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                '${AppConfig.baseUrl}${item['imagePath']}',
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.teal));
+                },
+                errorBuilder: (context, exception, stackTrace) {
+                  return const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add_photo_alternate, color: Colors.grey, size: 30),
+                        Text('Thêm ảnh', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            )
+          : const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add_photo_alternate, color: Colors.grey, size: 30),
+                  Text('Thêm ảnh', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                ],
+              ),
+            ),
+    ),
+  ),
 ),
-                                          )
-                                        : const Center(
-                                            child: Column(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              children: [
-                                                Icon(Icons.add_photo_alternate, color: Colors.grey, size: 30),
-                                                Text('Thêm ảnh', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                                              ],
-                                            ),
-                                          ),
-                                  ),
-                                ),
-                              ),
-
                               // Cột QR
                               DataCell(
                                 GestureDetector(
