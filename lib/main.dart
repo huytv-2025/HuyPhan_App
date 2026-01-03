@@ -465,54 +465,86 @@ class _QRScanScreenState extends State<QRScanScreen> {
   String get baseUrl => AppConfig.baseUrl;
 
   Future<void> _searchInventory(String qrData) async {
-    if (qrData.startsWith('HPAPP:')) {
-      final ivcode = qrData.substring(6).trim();
+  if (qrData.startsWith('HPAPP:')) {
+    final ivcode = qrData.substring(6).trim();
 
-      try {
-        final response = await http.post(
-          Uri.parse('$baseUrl/api/inventory/search'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'QRCode': ivcode}),
-        ).timeout(const Duration(seconds: 15));
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/inventory/search'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'QRCode': ivcode}),
+      ).timeout(const Duration(seconds: 15));
 
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          if (data['success'] == true) {
-            final item = data['data'];
-            itemData = item; // ← Lưu data để hiển thị ảnh
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
 
+        if (data['success'] == true) {
+          var rawData = data['data'];
+
+          if (rawData == null || (rawData is List && rawData.isEmpty)) {
             setState(() {
-              _scanResult =
-                  'Mã hàng: ${item['ivcode']}\n'
-                  'RVC: ${item['rvcname'] ?? item['rvc'] ?? 'Không có'}\n'
-                  'Tên SP: ${item['iname'] ?? 'Không có tên'}\n'
-                  'Tồn kho: ${item['vend']} cái';
-            });
-          } else {
-            setState(() {
-              _scanResult = data['message'] ?? 'Không tìm thấy sản phẩm';
+              _scanResult = 'Không tìm thấy sản phẩm';
               itemData = null;
             });
+            return;
           }
+
+          late Map<String, dynamic> item;
+          if (rawData is List) {
+            item = rawData[0] as Map<String, dynamic>;
+          } else if (rawData is Map<String, dynamic>) {
+            item = rawData;
+          } else {
+            setState(() {
+              _scanResult = 'Dữ liệu từ server không hợp lệ';
+              itemData = null;
+            });
+            return;
+          }
+
+          itemData = item;
+
+          setState(() {
+  String rvcDisplay = item['rvcname'] ?? item['rvc'] ?? 'Không có';
+  int totalCount = rawData is List ? rawData.length : 1;
+
+  String resultText =
+      'Mã hàng: ${item['ivcode']}\n'
+      'RVC: $rvcDisplay\n'
+      'Tên SP: ${item['iname'] ?? 'Không có tên'}\n'
+      'Tồn kho: ${item['vend']} cái';
+
+  if (totalCount > 1) {
+    resultText += '\n\n(Có $totalCount kho chứa sản phẩm này)';
+  }
+
+  _scanResult = resultText;
+});
         } else {
           setState(() {
-            _scanResult = 'Lỗi server: ${response.statusCode}';
+            _scanResult = data['message'] ?? 'Không tìm thấy sản phẩm';
             itemData = null;
           });
         }
-      } catch (e) {
+      } else {
         setState(() {
-          _scanResult = 'Lỗi kết nối: $e';
+          _scanResult = 'Lỗi server: ${response.statusCode}';
           itemData = null;
         });
       }
-    } else {
+    } catch (e) {
       setState(() {
-        _scanResult = 'QR không hợp lệ\n(Yêu cầu định dạng: HPAPP:mã_hàng)';
+        _scanResult = 'Lỗi kết nối: $e';
         itemData = null;
       });
     }
+  } else {
+    setState(() {
+      _scanResult = 'QR không hợp lệ\n(Yêu cầu định dạng: HPAPP:mã_hàng)';
+      itemData = null;
+    });
   }
+}
 
   void _switchCamera() {
     cameraController.switchCamera();

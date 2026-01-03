@@ -80,62 +80,82 @@ public class InventoryController : ControllerBase
 
     // POST: api/inventory/search (Quét QR - thêm RVCName)
     [HttpPost("search")]
-    public async Task<IActionResult> SearchByQR([FromBody] QRRequest request)
+public async Task<IActionResult> SearchByQR([FromBody] QRRequest request)
+{
+    Console.WriteLine($">>> RECEIVED QRCode: '{request?.QRCode}'");
+
+    if (string.IsNullOrWhiteSpace(request?.QRCode))
     {
-        Console.WriteLine($">>> RECEIVED QRCode: '{request?.QRCode}'");
-
-        if (string.IsNullOrWhiteSpace(request?.QRCode))
-        {
-            return BadRequest(new { success = false, message = "Vui lòng nhập hoặc quét QR/Barcode" });
-        }
-
-        try
-        {
-            await using var connection = new SqlConnection(_connectionString);
-            await connection.OpenAsync();
-
-            var query = @"
-                SELECT 
-                    i.VICode, 
-                    i.RVC,                         -- ← THÊM RVC
-                    i.VEnd, 
-                    dbo.fTCVNToUnicode(id.IName) AS IName,
-                    dbo.fTCVNToUnicode(de.RVCName) AS RVCName,  -- ← THÊM RVCName
-                    q.ImagePath  
-                FROM Inventory i
-                LEFT JOIN Itemdef id ON LTRIM(RTRIM(i.VICode)) = LTRIM(RTRIM(id.Icode))
-                LEFT JOIN DefRVCList de ON de.RVCNo = i.RVC    -- ← JOIN DefRVCList
-                WHERE LTRIM(RTRIM(i.VICode)) = @QRCode";
-
-            await using var command = new SqlCommand(query, connection);
-            command.Parameters.AddWithValue("@QRCode", request.QRCode.Trim());
-
-            await using var reader = await command.ExecuteReaderAsync();
-
-            if (await reader.ReadAsync())
-            {
-                return Ok(new
-                {
-                    success = true,
-                    data = new
-                    {
-                        ivcode = reader["VICode"]?.ToString()?.Trim() ?? "",
-                        rvc = reader["RVC"]?.ToString()?.Trim() ?? "",       // ← THÊM RVC
-                        rvcname = reader["RVCName"]?.ToString()?.Trim() ?? "Không có RVC", // ← THÊM RVCName
-                        vend = reader["VEnd"]?.ToString() ?? "0",
-                        iname = reader["IName"]?.ToString()?.Trim() ?? "Không có tên",
-                        imagePath = reader["ImagePath"]?.ToString()?.Trim() ?? ""  //
-                    }
-                });
-            }
-
-            return NotFound(new { success = false, message = "Không tìm thấy sản phẩm với QR/Barcode này" });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { success = false, message = "Lỗi server: " + ex.Message });
-        }
+        return BadRequest(new { success = false, message = "Vui lòng nhập hoặc quét QR/Barcode" });
     }
+
+    string qrInput = request.QRCode.Trim();
+
+    // Trích xuất Ivcode từ QR: nếu có tiền tố "HPAPP:", bỏ đi
+    string ivcode = qrInput.StartsWith("HPAPP:", StringComparison.OrdinalIgnoreCase)
+        ? qrInput.Substring(6).Trim()
+        : qrInput;
+
+    try
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        var query = @"
+            SELECT 
+                i.VICode, 
+                i.RVC,
+                dbo.fTCVNToUnicode(de.RVCName) AS RVCName,
+                i.VEnd, 
+                dbo.fTCVNToUnicode(id.IName) AS IName,
+                ISNULL(u.UnitName, 'Cái') AS UnitName,
+                q.ImagePath  
+            FROM Inventory i
+            LEFT JOIN Itemdef id ON LTRIM(RTRIM(i.VICode)) = LTRIM(RTRIM(id.Icode))
+            LEFT JOIN IUnitDef u ON id.IUnit = u.UnitCode
+            LEFT JOIN DefRVCList de ON de.RVCNo = i.RVC
+            LEFT JOIN QRInventory q ON LTRIM(RTRIM(i.VICode)) = q.Ivcode
+            WHERE LTRIM(RTRIM(i.VICode)) = @Ivcode
+            ORDER BY i.RVC";
+
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@Ivcode", ivcode);
+
+        await using var reader = await command.ExecuteReaderAsync();
+
+        var results = new List<object>();
+
+        while (await reader.ReadAsync())
+        {
+            results.Add(new
+            {
+                ivcode = reader["VICode"]?.ToString()?.Trim() ?? "",
+                rvc = reader["RVC"]?.ToString()?.Trim() ?? "",
+                rvcname = reader["RVCName"]?.ToString()?.Trim() ?? "Không có RVC",
+                vend = reader["VEnd"]?.ToString() ?? "0",
+                iname = reader["IName"]?.ToString()?.Trim() ?? "Không có tên",
+                unit = reader["UnitName"]?.ToString()?.Trim() ?? "Cái",
+                imagePath = reader["ImagePath"]?.ToString()?.Trim() ?? ""
+            });
+        }
+
+        if (results.Any())
+        {
+            return Ok(new
+            {
+                success = true,
+                count = results.Count,           // Thêm số lượng RVC tìm được
+                data = results                  // Trả về array (có thể 1 hoặc nhiều item)
+            });
+        }
+
+        return NotFound(new { success = false, message = "Không tìm thấy sản phẩm với mã này" });
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, new { success = false, message = "Lỗi server: " + ex.Message });
+    }
+}
 
     // POST: api/inventory/generate-batch
     [HttpPost("generate-batch")]
