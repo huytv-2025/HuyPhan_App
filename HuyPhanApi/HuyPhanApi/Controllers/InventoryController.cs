@@ -26,12 +26,12 @@ public class InventoryController : ControllerBase
                     i.RVC,                    -- Thêm cột RVC gốc
                     i.VPeriod, 
                     dbo.fTCVNToUnicode(id.IName) AS IName,
-                    ISNULL(u.UName, 'Cái') AS UnitName,
+                    ISNULL(u.UnitName, 'Cái') AS UnitName,
                     dbo.fTCVNToUnicode(de.RVCName) AS RVCName,  -- ← THÊM RVCName
                     q.ImagePath
                 FROM Inventory i
                 LEFT JOIN Itemdef id ON LTRIM(RTRIM(i.VICode)) = LTRIM(RTRIM(id.Icode))
-                LEFT JOIN Unitdef u ON id.Unit = u.UCode
+                LEFT JOIN IUnitDef u ON id.IUnit = u.UnitCode
                 LEFT JOIN QRInventory q ON LTRIM(RTRIM(i.VICode)) = q.Ivcode
                 LEFT JOIN DefRVCList de ON de.RVCNo = i.RVC     -- ← JOIN DefRVCList
                 WHERE 1 = 1";
@@ -100,7 +100,8 @@ public class InventoryController : ControllerBase
                     i.RVC,                         -- ← THÊM RVC
                     i.VEnd, 
                     dbo.fTCVNToUnicode(id.IName) AS IName,
-                    dbo.fTCVNToUnicode(de.RVCName) AS RVCName  -- ← THÊM RVCName
+                    dbo.fTCVNToUnicode(de.RVCName) AS RVCName,  -- ← THÊM RVCName
+                    q.ImagePath  
                 FROM Inventory i
                 LEFT JOIN Itemdef id ON LTRIM(RTRIM(i.VICode)) = LTRIM(RTRIM(id.Icode))
                 LEFT JOIN DefRVCList de ON de.RVCNo = i.RVC    -- ← JOIN DefRVCList
@@ -122,7 +123,8 @@ public class InventoryController : ControllerBase
                         rvc = reader["RVC"]?.ToString()?.Trim() ?? "",       // ← THÊM RVC
                         rvcname = reader["RVCName"]?.ToString()?.Trim() ?? "Không có RVC", // ← THÊM RVCName
                         vend = reader["VEnd"]?.ToString() ?? "0",
-                        iname = reader["IName"]?.ToString()?.Trim() ?? "Không có tên"
+                        iname = reader["IName"]?.ToString()?.Trim() ?? "Không có tên",
+                        imagePath = reader["ImagePath"]?.ToString()?.Trim() ?? ""  //
                     }
                 });
             }
