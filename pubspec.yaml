@@ -4,23 +4,20 @@ publish_to: 'none' # Ngăn publish nhầm lên pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.10.4
+  sdk: '^3.10.4'
 
 dependencies:
   flutter:
     sdk: flutter
-    
 
   cupertino_icons: ^1.0.8
-  image_picker: ^1.1.2       # Chọn ảnh từ gallery/camera
-  http: ^1.2.2               # Gọi API
-  #mobile_scanner: ^3.5.6     # Quét QR/Barcode (dùng cho tab Quét QR sau này)
+  image_picker: ^1.1.2
+  http: ^1.2.2
+  flutter_easyloading: ^3.0.5
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^5.1.1
+  permission_handler: ^12.0.1
 
-  # THÊM 2 PACKAGE QUAN TRỌNG CHO CHỨC NĂNG CẬP NHẬT QR
-  flutter_easyloading: ^3.0.5   # Loading đẹp khi gọi API
-  qr_flutter: ^4.1.0 
-  mobile_scanner: ^5.1.1           # Tạo và hiển thị mã QR chuẩn quốc tế (rất quan trọng!)
-image_picker: ^1.0.7
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -32,9 +29,14 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/images/   # Tất cả ảnh trong thư mục này đều được load
+    - assets/images/
 
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/app_icon.png"   # Đảm bảo file này tồn tại và là 1024x1024
+  image_path: "assets/images/app_icon.png"
+
+flutter_native_splash:
+  # Bạn có thể thêm config splash ở đây nếu cần
+  color: "#00acc1"
+  image: "assets/images/app_icon.png"

@@ -1,12 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Modify this file to customize your launch splash screen -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Nền gradient giống trang login -->
+    <item android:drawable="@android:color/transparent" />
+
     <item>
-        <bitmap android:gravity="fill" android:src="@drawable/background"/>
+        <bitmap
+            android:gravity="center"
+            android:src="@mipmap/ic_launcher" />
     </item>
+
+    <!-- Hoặc nếu bạn muốn nền gradient đẹp như trang login -->
+    <!-- Bỏ comment đoạn dưới nếu muốn dùng gradient -->
+    <!--
     <item>
-        <bitmap android:gravity="center" android:src="@drawable/splash"/>
+        <shape android:shape="rectangle">
+            <gradient
+                android:startColor="#FF80deea"
+                android:endColor="#FF00acc1"
+                android:angle="135" />
+        </shape>
     </item>
-    <item android:bottom="0dp">
-        <bitmap android:gravity="bottom" android:src="@drawable/branding"/>
-    </item>
+    -->
 </layer-list>

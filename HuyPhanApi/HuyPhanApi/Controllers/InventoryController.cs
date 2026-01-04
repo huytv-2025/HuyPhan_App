@@ -62,7 +62,7 @@ public class InventoryController : ControllerBase
                     ivcode = reader["VICode"]?.ToString()?.Trim() ?? "",
                     rvc = reader["RVC"]?.ToString()?.Trim() ?? "",       // ← THÊM RVC
                     rvcname = reader["RVCName"]?.ToString()?.Trim() ?? "", // ← THÊM RVCName
-                    vend = reader["VEnd"]?.ToString() ?? "0",
+                    vend = ((decimal)reader["VEnd"]).ToString(System.Globalization.CultureInfo.InvariantCulture),
                     vperiod = reader["VPeriod"]?.ToString() ?? "",
                     iname = reader["IName"]?.ToString()?.Trim() ?? "",
                     unit = reader["UnitName"]?.ToString()?.Trim() ?? "Cái",
@@ -132,7 +132,7 @@ public async Task<IActionResult> SearchByQR([FromBody] QRRequest request)
                 ivcode = reader["VICode"]?.ToString()?.Trim() ?? "",
                 rvc = reader["RVC"]?.ToString()?.Trim() ?? "",
                 rvcname = reader["RVCName"]?.ToString()?.Trim() ?? "Không có RVC",
-                vend = reader["VEnd"]?.ToString() ?? "0",
+                vend = ((decimal)reader["VEnd"]).ToString(System.Globalization.CultureInfo.InvariantCulture),
                 iname = reader["IName"]?.ToString()?.Trim() ?? "Không có tên",
                 unit = reader["UnitName"]?.ToString()?.Trim() ?? "Cái",
                 imagePath = reader["ImagePath"]?.ToString()?.Trim() ?? ""
