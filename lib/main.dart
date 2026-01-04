@@ -5,6 +5,12 @@
   import 'package:qr_flutter/qr_flutter.dart';
   import 'package:mobile_scanner/mobile_scanner.dart'; // Thêm package này vào pubspec.yaml: mobile_scanner: ^5.1.1
   import 'package:image_picker/image_picker.dart';
+  import 'package:pdf/pdf.dart';
+  import 'package:pdf/widgets.dart' as pw;
+  import 'package:printing/printing.dart';
+  import 'package:path_provider/path_provider.dart';
+  import 'package:permission_handler/permission_handler.dart';
+  import 'dart:io';
 
   // Global lưu base URL sau khi login thành công
   class AppConfig {
@@ -1208,7 +1214,7 @@ class _QRUpdateScreenState extends State<QRUpdateScreen> {
       );
     }
   }
- // ================== TRANG THIẾT LẬP - QUẢN LÝ ẢNH + TẠO QR ==================
+ // ================== TRANG THIẾT LẬP - QUẢN LÝ ẢNH + TẠO QR + IN/LƯU ==================
 class ImageManagerScreen extends StatefulWidget {
   const ImageManagerScreen({super.key});
 
@@ -1311,7 +1317,7 @@ class _ImageManagerScreenState extends State<ImageManagerScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
-          _loadInventory(); // Refresh lại danh sách
+          _loadInventory();
           EasyLoading.showSuccess('Upload ảnh thành công cho $ivcode!');
         } else {
           EasyLoading.showError(data['message'] ?? 'Upload thất bại');
@@ -1325,96 +1331,148 @@ class _ImageManagerScreenState extends State<ImageManagerScreen> {
     }
   }
 
-  void _showQRDialog(String ivcode, String iname, String vend) {
-    final String qrData = 'HPAPP:$ivcode';
+  Future<void> _printQR(String ivcode, String iname) async {
+  final qrData = 'HPAPP:$ivcode';
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Mã QR - $iname'),
-        content: SizedBox(
-          width: 300,
-          height: 420,
-          child: Column(
-            children: [
-              QrImageView(
-                data: qrData,
-                version: QrVersions.auto,
-                size: 250,
-                backgroundColor: Colors.white,
-                errorCorrectionLevel: QrErrorCorrectLevel.H,
-              ),
-              const SizedBox(height: 20),
-              Text('Mã hàng: $ivcode', style: const TextStyle(fontWeight: FontWeight.bold)),
-              Text('Tồn kho: $vend cái', style: const TextStyle(color: Colors.green)),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Đóng')),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _generateBatchQR() async {
-  // Sửa phần parse tồn kho: loại bỏ dấu chấm
-  final ivcodes = inventoryList.where((item) {
-    String vendStr = item['Vend'] ?? '0';
-    vendStr = vendStr.replaceAll('.', '').replaceAll(',', ''); // Loại bỏ dấu . và ,
-    final vend = int.tryParse(vendStr) ?? 0;
-    return vend > 0;
-  }).map((item) => item['Ivcode']!).toList();
-
-  if (ivcodes.isEmpty) {
-    EasyLoading.showInfo('Không có sản phẩm nào có tồn kho > 0');
-    return;
-  }
-
-  // Thêm xác nhận để chắc chắn
-  final confirm = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Tạo QR hàng loạt'),
-      content: Text('Tạo QR cho ${ivcodes.length} sản phẩm có tồn kho?'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
-        TextButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text('Tạo ngay', style: TextStyle(color: Colors.teal)),
-        ),
-      ],
+  // Tạo QR image từ QrPainter (sửa deprecated)
+  final qrPainter = QrPainter(
+    data: qrData,
+    version: QrVersions.auto,
+    errorCorrectionLevel: QrErrorCorrectLevel.H,
+    dataModuleStyle: const QrDataModuleStyle(
+      dataModuleShape: QrDataModuleShape.square,
+      color: Color(0xFF000000), // Màu đen cho các module dữ liệu
+    ),
+    eyeStyle: const QrEyeStyle(
+      eyeShape: QrEyeShape.square,
+      color: Color(0xFF000000), // Màu đen cho mắt QR
     ),
   );
 
-  if (confirm != true) return;
+  final picData = await qrPainter.toImageData(400); // Kích thước QR lớn hơn để in đẹp
+  final qrBuffer = picData!.buffer.asUint8List();
 
-  EasyLoading.show(status: 'Đang tạo QR hàng loạt...');
+  // Tạo PDF bằng package pdf (cách mới thay convertHtml)
+  final pdf = pw.Document();
 
-  try {
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/inventory/generate-batch'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'ivcodes': ivcodes,
-        'createdBy': 'MobileApp',
-      }),
+  final qrImage = pw.MemoryImage(qrBuffer);
+
+  pdf.addPage(
+    pw.Page(
+      pageFormat: PdfPageFormat.a4, // Hoặc PdfPageFormat(100, 150, marginAll: 10) cho nhãn nhỏ
+      build: (pw.Context context) {
+        return pw.Center(
+          child: pw.Column(
+            mainAxisAlignment: pw.MainAxisAlignment.center,
+            children: [
+              pw.Text(iname, style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 10),
+              pw.Text('Mã hàng: $ivcode', style: const pw.TextStyle(fontSize: 16)),
+              pw.SizedBox(height: 20),
+              pw.Image(qrImage, width: 200, height: 200),
+              pw.SizedBox(height: 10),
+              pw.Text('Quét bằng app HuyPhan', style: const pw.TextStyle(fontSize: 12)),
+            ],
+          ),
+        );
+      },
+    ),
+  );
+
+  // In PDF
+  await Printing.layoutPdf(
+    onLayout: (format) async => await pdf.save(),
+    name: 'QR_$ivcode.pdf',
+  );
+}
+
+  // Hàm lưu ảnh QR vào thư viện
+  Future<void> _saveQRImage(String ivcode, String iname) async {
+    // Yêu cầu quyền lưu trữ (Android) hoặc Photos (iOS)
+    var status = Platform.isAndroid
+        ? await Permission.storage.request()
+        : await Permission.photos.request();
+
+    if (!status.isGranted) {
+      EasyLoading.showError('Cần cấp quyền lưu ảnh để tải QR');
+      return;
+    }
+
+    final qrData = 'HPAPP:$ivcode';
+    final qrPainter = QrPainter(
+      data: qrData,
+      version: QrVersions.auto,
+      errorCorrectionLevel: QrErrorCorrectLevel.H,
+      dataModuleStyle: const QrDataModuleStyle(
+        dataModuleShape: QrDataModuleShape.square,
+        color: Color(0xFF000000),
+      ),
+      eyeStyle: const QrEyeStyle(
+        eyeShape: QrEyeShape.square,
+        color: Color(0xFF000000),
+      ),
     );
 
-    final data = jsonDecode(response.body);
-    EasyLoading.dismiss();
+    final picData = await qrPainter.toImageData(300);
+    final buffer = picData!.buffer.asUint8List();
 
-    if (response.statusCode == 200 && data['success'] == true) {
-      final count = data['count'] ?? ivcodes.length;
-      EasyLoading.showSuccess('Tạo thành công $count QR code!');
-    } else {
-      EasyLoading.showError(data['message'] ?? 'Tạo QR thất bại');
-    }
-  } catch (e) {
-    EasyLoading.dismiss();
-    EasyLoading.showError('Lỗi: $e');
+    final directory = await getApplicationDocumentsDirectory();
+    final fileName = 'QR_$ivcode.png';
+    final file = File('${directory.path}/$fileName');
+    await file.writeAsBytes(buffer);
+
+    EasyLoading.showSuccess('Đã lưu QR vào: ${file.path}');
   }
-}
+
+  Future<void> _generateBatchQR() async {
+    final ivcodes = inventoryList.where((item) {
+      String vendStr = item['Vend'] ?? '0';
+      vendStr = vendStr.replaceAll('.', '').replaceAll(',', '');
+      final vend = int.tryParse(vendStr) ?? 0;
+      return vend > 0;
+    }).map((item) => item['Ivcode']!).toList();
+
+    if (ivcodes.isEmpty) {
+      EasyLoading.showInfo('Không có sản phẩm nào có tồn kho > 0');
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Tạo QR hàng loạt'),
+        content: Text('Tạo QR cho ${ivcodes.length} sản phẩm có tồn kho?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Tạo ngay', style: TextStyle(color: Colors.teal))),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    EasyLoading.show(status: 'Đang tạo QR hàng loạt...');
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/inventory/generate-batch'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'ivcodes': ivcodes, 'createdBy': 'MobileApp'}),
+      );
+
+      final data = jsonDecode(response.body);
+      EasyLoading.dismiss();
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        EasyLoading.showSuccess('Tạo thành công ${data['count'] ?? ivcodes.length} QR code!');
+      } else {
+        EasyLoading.showError(data['message'] ?? 'Tạo QR thất bại');
+      }
+    } catch (e) {
+      EasyLoading.dismiss();
+      EasyLoading.showError('Lỗi: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1480,7 +1538,7 @@ class _ImageManagerScreenState extends State<ImageManagerScreen> {
                               padding: const EdgeInsets.all(12),
                               child: Row(
                                 children: [
-                                  // Ảnh hiện tại
+                                  // Ảnh sản phẩm
                                   Container(
                                     width: 100,
                                     height: 100,
@@ -1494,15 +1552,11 @@ class _ImageManagerScreenState extends State<ImageManagerScreen> {
                                             child: Image.network(
                                               '${AppConfig.baseUrl}${item['imagePath']}',
                                               fit: BoxFit.cover,
-                                              loadingBuilder: (_, child, progress) => progress == null
-                                                  ? child
-                                                  : const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                              loadingBuilder: (_, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(strokeWidth: 2)),
                                               errorBuilder: (_, _, _) => const Icon(Icons.image_not_supported, size: 40, color: Colors.grey),
                                             ),
                                           )
-                                        : const Center(
-                                            child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
-                                          ),
+                                        : const Center(child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey)),
                                   ),
                                   const SizedBox(width: 16),
                                   // Thông tin
@@ -1516,28 +1570,35 @@ class _ImageManagerScreenState extends State<ImageManagerScreen> {
                                       ],
                                     ),
                                   ),
-                                  // Các nút hành động
+                                  // Các nút hành động (4 nút)
                                   Column(
                                     children: [
                                       ElevatedButton.icon(
                                         onPressed: () => _pickAndUploadImage(ivcode),
-                                        icon: const Icon(Icons.upload, size: 18),
-                                        label: const Text('Ảnh'),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.deepPurple,
-                                          minimumSize: const Size(100, 40),
-                                        ),
+                                        icon: const Icon(Icons.upload, size: 16),
+                                        label: const Text('Ảnh', style: TextStyle(fontSize: 12)),
+                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, minimumSize: const Size(90, 36)),
                                       ),
-                                      const SizedBox(height: 8),
+                                      const SizedBox(height: 6),
+                                      ElevatedButton.icon(
+                                        onPressed: () => _printQR(ivcode, iname),
+                                        icon: const Icon(Icons.print, size: 16),
+                                        label: const Text('In QR', style: TextStyle(fontSize: 12)),
+                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, minimumSize: const Size(90, 36)),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      ElevatedButton.icon(
+                                        onPressed: () => _saveQRImage(ivcode, iname),
+                                        icon: const Icon(Icons.save_alt, size: 16),
+                                        label: const Text('Lưu QR', style: TextStyle(fontSize: 12)),
+                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green, minimumSize: const Size(90, 36)),
+                                      ),
+                                      const SizedBox(height: 6),
                                       ElevatedButton.icon(
                                         onPressed: () => _showQRDialog(ivcode, iname, vend),
-                                        icon: const Icon(Icons.qr_code, size: 18),
-                                        label: const Text('QR'),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.orange,
-                                          foregroundColor: Colors.white,
-                                          minimumSize: const Size(100, 40),
-                                        ),
+                                        icon: const Icon(Icons.qr_code, size: 16),
+                                        label: const Text('Xem QR', style: TextStyle(fontSize: 12)),
+                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, minimumSize: const Size(90, 36)),
                                       ),
                                     ],
                                   ),
@@ -1548,6 +1609,38 @@ class _ImageManagerScreenState extends State<ImageManagerScreen> {
                         },
                       ),
           ),
+        ],
+      ),
+    );
+  }
+
+  void _showQRDialog(String ivcode, String iname, String vend) {
+    final String qrData = 'HPAPP:$ivcode';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Mã QR - $iname'),
+        content: SizedBox(
+          width: 300,
+          height: 420,
+          child: Column(
+            children: [
+              QrImageView(
+                data: qrData,
+                version: QrVersions.auto,
+                size: 250,
+                backgroundColor: Colors.white,
+                errorCorrectionLevel: QrErrorCorrectLevel.H,
+              ),
+              const SizedBox(height: 20),
+              Text('Mã hàng: $ivcode', style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text('Tồn kho: $vend cái', style: const TextStyle(color: Colors.green)),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Đóng')),
         ],
       ),
     );
