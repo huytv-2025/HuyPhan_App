@@ -8,9 +8,9 @@
   import 'package:pdf/pdf.dart';
   import 'package:pdf/widgets.dart' as pw;
   import 'package:printing/printing.dart';
-  import 'package:path_provider/path_provider.dart';
-  import 'package:permission_handler/permission_handler.dart';
-  import 'dart:io';
+ 
+  
+  
 
   // Global lưu base URL sau khi login thành công
   class AppConfig {
@@ -497,34 +497,35 @@ class _QRScanScreenState extends State<QRScanScreen> {
             return;
           }
 
-          late Map<String, dynamic> item;
-          if (rawData is List) {
-            item = rawData[0] as Map<String, dynamic>;
-          } else if (rawData is Map<String, dynamic>) {
-            item = rawData;
-          } else {
-            setState(() {
-              _scanResult = 'Dữ liệu từ server không hợp lệ';
-              itemData = null;
-            });
-            return;
-          }
+          // Lưu toàn bộ danh sách kho
+List<Map<String, dynamic>> allItems = [];
+if (rawData is List) {
+  allItems = rawData.cast<Map<String, dynamic>>();
+} else if (rawData is Map<String, dynamic>) {
+  allItems = [rawData];
+}
 
-          itemData = item;
+// Lấy item đầu tiên để lấy tên sản phẩm, mã hàng chung
+final firstItem = allItems.first;
 
-          setState(() {
-  String rvcDisplay = item['rvcname'] ?? item['rvc'] ?? 'Không có';
-  int totalCount = rawData is List ? rawData.length : 1;
+itemData = firstItem; // Giữ để hiển thị ảnh (nếu server trả imagePath ở tất cả item)
 
-  String resultText =
-      'Mã hàng: ${item['ivcode']}\n'
-      'RVC: $rvcDisplay\n'
-      'Tên SP: ${item['iname'] ?? 'Không có tên'}\n'
-      'Tồn kho: ${item['vend']} cái';
+setState(() {
+  String resultText = 'Mã hàng: ${firstItem['ivcode']}\n'
+      'Tên SP: ${firstItem['iname'] ?? 'Không có tên'}\n\n'
+      'Chi tiết tồn kho theo kho:\n';
 
-  if (totalCount > 1) {
-    resultText += '\n\n(Có $totalCount kho chứa sản phẩm này)';
+  for (var item in allItems) {
+    String rvcDisplay = item['rvcname']?.toString().trim().isNotEmpty == true
+        ? item['rvcname']
+        : (item['rvc'] ?? 'Kho không xác định');
+    String vend = item['vend']?.toString() ?? '0';
+    resultText += '• $rvcDisplay: $vend cái\n';
   }
+
+  // Tổng tồn
+  int totalVend = allItems.fold(0, (sum, item) => sum + (int.tryParse(item['vend']?.toString() ?? '0') ?? 0));
+  resultText += '\nTổng tồn kho: $totalVend cái';
 
   _scanResult = resultText;
 });
@@ -626,7 +627,7 @@ Builder(builder: (context) {
     return const Icon(Icons.image_not_supported, size: 100, color: Colors.grey);
   }
 
-  final String imageUrl = '${AppConfig.baseUrl}${imagePathValue.toString().trim()}';
+  final String imageUrl = '${AppConfig.baseUrl}${imagePathValue.toString().trim().startsWith('/') ? '' : '/'}${imagePathValue.toString().trim()}';
 
   return ClipRRect(
     borderRadius: BorderRadius.circular(12),
@@ -965,7 +966,7 @@ class _QRUpdateScreenState extends State<QRUpdateScreen> {
                                               ? ClipRRect(
                                                   borderRadius: BorderRadius.circular(12),
                                                   child: Image.network(
-                                                    '${AppConfig.baseUrl}${item['imagePath']}',
+                                                    '${AppConfig.baseUrl}${item['imagePath']?.startsWith('/') == true ? '' : '/'}${item['imagePath'] ?? ''}',
                                                     fit: BoxFit.cover,
                                                     loadingBuilder: (context, child, progress) => progress == null
                                                         ? child
@@ -1386,44 +1387,7 @@ class _ImageManagerScreenState extends State<ImageManagerScreen> {
   );
 }
 
-  // Hàm lưu ảnh QR vào thư viện
-  Future<void> _saveQRImage(String ivcode, String iname) async {
-    // Yêu cầu quyền lưu trữ (Android) hoặc Photos (iOS)
-    var status = Platform.isAndroid
-        ? await Permission.storage.request()
-        : await Permission.photos.request();
-
-    if (!status.isGranted) {
-      EasyLoading.showError('Cần cấp quyền lưu ảnh để tải QR');
-      return;
-    }
-
-    final qrData = 'HPAPP:$ivcode';
-    final qrPainter = QrPainter(
-      data: qrData,
-      version: QrVersions.auto,
-      errorCorrectionLevel: QrErrorCorrectLevel.H,
-      dataModuleStyle: const QrDataModuleStyle(
-        dataModuleShape: QrDataModuleShape.square,
-        color: Color(0xFF000000),
-      ),
-      eyeStyle: const QrEyeStyle(
-        eyeShape: QrEyeShape.square,
-        color: Color(0xFF000000),
-      ),
-    );
-
-    final picData = await qrPainter.toImageData(300);
-    final buffer = picData!.buffer.asUint8List();
-
-    final directory = await getApplicationDocumentsDirectory();
-    final fileName = 'QR_$ivcode.png';
-    final file = File('${directory.path}/$fileName');
-    await file.writeAsBytes(buffer);
-
-    EasyLoading.showSuccess('Đã lưu QR vào: ${file.path}');
-  }
-
+  
   Future<void> _generateBatchQR() async {
     final ivcodes = inventoryList.where((item) {
       String vendStr = item['Vend'] ?? '0';
@@ -1513,7 +1477,7 @@ class _ImageManagerScreenState extends State<ImageManagerScreen> {
                   onPressed: _loadInventory,
                   icon: const Icon(Icons.refresh),
                   label: const Text('Làm mới'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 241, 240, 242)),
                 ),
               ],
             ),
@@ -1550,7 +1514,7 @@ class _ImageManagerScreenState extends State<ImageManagerScreen> {
                                         ? ClipRRect(
                                             borderRadius: BorderRadius.circular(12),
                                             child: Image.network(
-                                              '${AppConfig.baseUrl}${item['imagePath']}',
+                                              '${AppConfig.baseUrl}${item['imagePath']?.startsWith('/') == true ? '' : '/'}${item['imagePath'] ?? ''}',
                                               fit: BoxFit.cover,
                                               loadingBuilder: (_, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(strokeWidth: 2)),
                                               errorBuilder: (_, _, _) => const Icon(Icons.image_not_supported, size: 40, color: Colors.grey),
@@ -1577,28 +1541,23 @@ class _ImageManagerScreenState extends State<ImageManagerScreen> {
                                         onPressed: () => _pickAndUploadImage(ivcode),
                                         icon: const Icon(Icons.upload, size: 16),
                                         label: const Text('Ảnh', style: TextStyle(fontSize: 12)),
-                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, minimumSize: const Size(90, 36)),
+                                        style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 220, 227, 229), minimumSize: const Size(90, 36)),
                                       ),
                                       const SizedBox(height: 6),
                                       ElevatedButton.icon(
                                         onPressed: () => _printQR(ivcode, iname),
                                         icon: const Icon(Icons.print, size: 16),
                                         label: const Text('In QR', style: TextStyle(fontSize: 12)),
-                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, minimumSize: const Size(90, 36)),
+                                        style: ElevatedButton.styleFrom(backgroundColor: const Color.fromRGBO(255, 220, 227, 229), minimumSize: const Size(90, 36)),
                                       ),
                                       const SizedBox(height: 6),
-                                      ElevatedButton.icon(
-                                        onPressed: () => _saveQRImage(ivcode, iname),
-                                        icon: const Icon(Icons.save_alt, size: 16),
-                                        label: const Text('Lưu QR', style: TextStyle(fontSize: 12)),
-                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green, minimumSize: const Size(90, 36)),
-                                      ),
+                                      
                                       const SizedBox(height: 6),
                                       ElevatedButton.icon(
                                         onPressed: () => _showQRDialog(ivcode, iname, vend),
                                         icon: const Icon(Icons.qr_code, size: 16),
                                         label: const Text('Xem QR', style: TextStyle(fontSize: 12)),
-                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, minimumSize: const Size(90, 36)),
+                                        style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 246, 216, 170), minimumSize: const Size(90, 36)),
                                       ),
                                     ],
                                   ),
