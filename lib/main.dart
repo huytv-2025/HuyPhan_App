@@ -65,20 +65,32 @@
       _portController.addListener(_updateApiUrl);
     }
 
-    void _updateApiUrl() {
+  void _updateApiUrl() {
   final ip = _ipController.text.trim();
   final portText = _portController.text.trim();
 
   if (ip.isNotEmpty) {
     String base;
     if (portText.isNotEmpty) {
-      base = 'http://$ip:$portText';
+      // Có port → thường là server nội bộ → dùng http
+      if (ip.startsWith('http://') || ip.startsWith('https://')) {
+        base = '$ip:$portText';
+      } else {
+        base = 'http://$ip:$portText';
+      }
     } else {
-      // Ngrok luôn dùng HTTPS → ép dùng https khi port trống
-      base = ip.startsWith('http') ? ip : 'https://$ip';
+      // Không port → ngrok hoặc domain public → dùng https
+      if (ip.startsWith('http://') || ip.startsWith('https://')) {
+        base = ip;
+      } else {
+        base = 'https://$ip';
+      }
     }
     apiUrl = '$base/api/login';
     AppConfig.baseUrl = base;
+
+    // Có thể để lại tạm để kiểm tra lần cuối
+    // print('Base URL lưu: $base');
   }
 }
 
@@ -613,21 +625,32 @@ setState(() {
                             children: [
     // === ẢNH SẢN PHẨM - FIX TRIỆT ĐỂ NULL SAFETY ===
 Builder(builder: (context) {
-  // Copy itemData vào biến local để Dart cho phép promotion
   final Map<String, dynamic>? localItemData = itemData;
 
   if (localItemData == null) {
     return const Icon(Icons.image_not_supported, size: 100, color: Colors.grey);
   }
 
-  // Bây giờ Dart sẽ promotion localItemData thành non-null
   final dynamic imagePathValue = localItemData['imagePath'];
-
   if (imagePathValue is! String || imagePathValue.toString().trim().isEmpty) {
     return const Icon(Icons.image_not_supported, size: 100, color: Colors.grey);
   }
 
-  final String imageUrl = '${AppConfig.baseUrl}${imagePathValue.toString().trim().startsWith('/') ? '' : '/'}${imagePathValue.toString().trim()}';
+  String imagePath = imagePathValue.toString().trim();
+  // Đảm bảo imagePath bắt đầu bằng /
+  if (!imagePath.startsWith('/')) {
+    imagePath = '/$imagePath';
+  }
+
+  // Đảm bảo baseUrl có protocol
+  String fullBase = AppConfig.baseUrl;
+  if (!fullBase.startsWith('http://') && !fullBase.startsWith('https://')) {
+    fullBase = 'https://$fullBase'; // hoặc http:// tùy trường hợp
+  }
+
+  final String imageUrl = fullBase + imagePath;
+
+  //print('Loading image from: $imageUrl'); // DEBUG: xem URL thực tế
 
   return ClipRRect(
     borderRadius: BorderRadius.circular(12),
@@ -637,12 +660,18 @@ Builder(builder: (context) {
       height: 200,
       fit: BoxFit.cover,
       loadingBuilder: (context, child, progress) {
-        return const Center(
-          child: CircularProgressIndicator(color: Colors.teal),
-        );
+        if (progress == null) return child;
+        return const Center(child: CircularProgressIndicator(color: Colors.teal));
       },
       errorBuilder: (context, error, stackTrace) {
-        return const Icon(Icons.image_not_supported, size: 100, color: Colors.grey);
+       // print('Image load error: $error'); // DEBUG
+        return const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.broken_image, size: 60, color: Colors.grey),
+            Text('Không tải được ảnh', style: TextStyle(color: Colors.red, fontSize: 12)),
+          ],
+        );
       },
     ),
   );
