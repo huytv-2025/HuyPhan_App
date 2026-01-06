@@ -4,7 +4,7 @@ using Microsoft.Data.SqlClient;
 namespace HuyPhanApi.Controllers;
 
 [ApiController]
-[Route("api/login")]
+[Route("api/[controller]")]
 public class LoginController : ControllerBase
 {
     private readonly string _connectionString = 

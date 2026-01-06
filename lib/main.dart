@@ -16,7 +16,32 @@
   class AppConfig {
     static String baseUrl = '';
   }
+// === HÀM XÂY DỰNG URL ẢNH AN TOÀN - THÊM ĐOẠN NÀY SAU CLASS AppConfig ===
+String buildImageUrl(String? imagePath) {
+  if (imagePath == null || imagePath.trim().isEmpty) {
+    return '';
+  }
 
+  String path = imagePath.trim();
+  if (!path.startsWith('/')) {
+    path = '/$path';
+  }
+
+  String base = AppConfig.baseUrl.trim();
+  if (base.isEmpty) return '';
+
+  // Thêm https:// nếu chưa có (phù hợp với ngrok hoặc domain)
+  if (!base.startsWith('http://') && !base.startsWith('https://')) {
+    base = 'https://$base';
+  }
+
+  // Xóa dấu / thừa ở cuối base để tránh //
+  if (base.endsWith('/')) {
+    base = base.substring(0, base.length - 1);
+  }
+
+  return '$base$path';
+}
   void main() {
     runApp(const MyApp());
   }
@@ -528,12 +553,12 @@ setState(() {
       'Chi tiết tồn kho theo kho:\n';
 
   for (var item in allItems) {
-    String rvcDisplay = item['rvcname']?.toString().trim().isNotEmpty == true
-        ? item['rvcname']
-        : (item['rvc'] ?? 'Kho không xác định');
-    String vend = item['vend']?.toString() ?? '0';
-    resultText += '• $rvcDisplay: $vend cái\n';
-  }
+  String rvcDisplay = item['locationName']?.toString().trim().isNotEmpty == true
+      ? item['locationName']
+      : (item['locationCode'] ?? 'Kho không xác định');
+  String vend = item['quantity']?.toString() ?? '0';
+  resultText += '• $rvcDisplay: $vend cái\n';
+}
 
   // Tổng tồn
   int totalVend = allItems.fold(0, (sum, item) => sum + (int.tryParse(item['vend']?.toString() ?? '0') ?? 0));
@@ -739,91 +764,158 @@ class _QRUpdateScreenState extends State<QRUpdateScreen> {
   String get baseUrl => AppConfig.baseUrl;
 
   List<Map<String, String>> get filteredList {
-    final query = _searchController.text.toLowerCase().trim();
-    return inventoryList.where((item) {
-      final String ivcode = item['Ivcode'] ?? '';
-      final String iname = item['iname'] ?? '';
-      return ivcode.toLowerCase().contains(query) || iname.toLowerCase().contains(query);
-    }).toList();
-  }
+  final String query = _searchController.text.toLowerCase().trim();
+  final String selected = selectedRvc?.trim() ?? '';
+
+  return inventoryList.where((item) {
+    // Chuẩn hóa dữ liệu để tìm kiếm và lọc chính xác
+    final String ivcode = (item['Ivcode'] ?? '').toLowerCase().trim();
+    final String iname = (item['iname'] ?? '').toLowerCase().trim();
+    final String rvcno = (item['rvc'] ?? '').trim(); // RVCNo từ inventory
+
+    // Tìm kiếm theo mã hoặc tên
+    final bool matchesSearch = ivcode.contains(query) || iname.contains(query);
+
+    // Lọc theo kho: nếu selected rỗng → hiện tất cả
+    final bool matchesRvc = selected.isEmpty || rvcno == selected;
+
+    return matchesSearch && matchesRvc;
+  }).toList();
+}
 
   @override
   void initState() {
     super.initState();
     _loadInventory();
+    _loadRvcList(); 
+  }
+List<Map<String, String>> rvcList = []; // Danh sách kho từ API
+String? selectedRvc = ''; // Mặc định chọn "Tất cả kho"
+bool isLoadingRvc = true; // Thêm dòng này
+
+Future<void> _loadRvcList() async {
+  if (baseUrl.isEmpty) {
+    setState(() {
+      rvcList = [{'RVCno': '', 'RVCname': 'Tất cả kho'}];
+      selectedRvc = '';
+      isLoadingRvc = false;
+    });
+    return;
   }
 
-  Future<void> _loadInventory() async {
-    if (baseUrl.isEmpty) {
-      EasyLoading.showError('Chưa đăng nhập hoặc mất kết nối server');
-      return;
-    }
+  setState(() => isLoadingRvc = true);
 
-    final vperiod = _vperiodController.text.trim();
-    final search = _searchController.text.trim();
+  try {
+    final response = await http.get(Uri.parse('$baseUrl/api/Rvc')).timeout(const Duration(seconds: 15));
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
 
-    var url = '$baseUrl/api/inventory';
-    if (vperiod.isNotEmpty || search.isNotEmpty) {
-      final uri = Uri.parse(url).replace(queryParameters: {
-        if (vperiod.isNotEmpty) 'vperiod': vperiod,
-        if (search.isNotEmpty) 'search': search,
-      });
-      url = uri.toString();
-    }
+      // Map dữ liệu từ API, loại bỏ các item có RVCno trùng '' (nếu có)
+      var apiRvcList = data.map<Map<String, String>>((item) => {
+        'RVCno': item['RVCno']?.toString().trim() ?? '',  // trim để sạch
+        'RVCname': item['RVCname']?.toString().trim() ?? 'Kho không tên',
+      }).toList();
 
-    EasyLoading.show(status: 'Đang tải dữ liệu tồn kho...');
-    setState(() => isLoading = true);
+      // Loại bỏ duplicate RVCno (giữ item đầu tiên)
+      var seen = <String>{};
+      apiRvcList = apiRvcList.where((item) {
+        String key = item['RVCno']!;
+        if (seen.contains(key)) return false;
+        seen.add(key);
+        return true;
+      }).toList();
 
-    try {
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
-
-      if (response.statusCode == 200) {
-        final List<dynamic> rawData = jsonDecode(response.body);
-        setState(() {
-          inventoryList = rawData.map<Map<String, String>>((item) => {
-                'Ivcode': item['ivcode']?.toString().trim() ?? '',
-                'rvc': item['rvc']?.toString().trim() ?? '',
-                'rvcname': item['rvcname']?.toString().trim() ?? '',
-                'iname': item['iname']?.toString().trim() ?? 'Sản phẩm ${item['ivcode']}',
-                'Vend': item['vend']?.toString() ?? '0',
-                'Vperiod': item['vperiod']?.toString() ?? '',
-                'unit': item['unit']?.toString().trim() ?? 'Cái',
-                'imagePath': item['imagePath']?.toString().trim() ?? '',
-              }).toList();
-
-          // Tự động điền kỳ mới nhất nếu chưa có
-          if (inventoryList.isNotEmpty && _vperiodController.text.trim().isEmpty) {
-            final validPeriods = inventoryList
-                .map((e) => e['Vperiod']?.trim())
-                .where((p) => p != null && p.isNotEmpty)
-                .cast<String>()
-                .toSet()
-                .toList();
-
-            if (validPeriods.isNotEmpty) {
-              validPeriods.sort((a, b) => b.compareTo(a));
-              _vperiodController.text = validPeriods.first;
-            }
-          }
-        });
-      } else {
-        throw Exception('Lỗi server: ${response.statusCode}');
-      }
-    } catch (e) {
-      EasyLoading.showError('Không thể tải dữ liệu: $e');
-      // Dữ liệu mẫu khi lỗi
       setState(() {
-        inventoryList = [
-          {'Ivcode': 'IV001', 'iname': 'iPhone 15 Pro Max', 'Vend': '25', 'unit': 'Cái', 'rvcname': 'Kho Hà Nội', 'imagePath': ''},
-          {'Ivcode': 'IV002', 'iname': 'MacBook Pro M3', 'Vend': '8', 'unit': 'Cái', 'rvcname': 'Kho TP.HCM', 'imagePath': ''},
-        ];
+        rvcList = apiRvcList;
+
+        // Chỉ thêm "Tất cả kho" nếu chưa có item nào với RVCno = ''
+        if (!rvcList.any((item) => item['RVCno'] == '')) {
+          rvcList.insert(0, {'RVCno': '', 'RVCname': 'Tất cả kho'});
+        }
+
+        selectedRvc = ''; // Luôn chọn "Tất cả kho" mặc định
+        isLoadingRvc = false;
       });
-    } finally {
-      EasyLoading.dismiss();
-      setState(() => isLoading = false);
+    } else {
+      throw Exception();
     }
+  } catch (e) {
+    EasyLoading.showError('Không tải được danh sách kho');
+    setState(() {
+      rvcList = [{'RVCno': '', 'RVCname': 'Tất cả kho'}];
+      selectedRvc = '';
+      isLoadingRvc = false;
+    });
+  }
+}
+  Future<void> _loadInventory() async {
+  if (baseUrl.isEmpty) {
+    EasyLoading.showError('Chưa đăng nhập');
+    return;
   }
 
+  final vperiod = _vperiodController.text.trim();
+  final search = _searchController.text.trim();
+
+  var url = '$baseUrl/api/inventory';
+  if (vperiod.isNotEmpty || search.isNotEmpty) {
+    final uri = Uri.parse(url).replace(queryParameters: {
+      if (vperiod.isNotEmpty) 'vperiod': vperiod,
+      if (search.isNotEmpty) 'search': search,
+    });
+    url = uri.toString();
+  }
+
+  EasyLoading.show(status: 'Đang tải...');
+  setState(() => isLoading = true);
+
+  try {
+    final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
+    if (response.statusCode == 200) {
+      final List<dynamic> rawData = jsonDecode(response.body);
+      setState(() {
+        inventoryList = rawData.map<Map<String, String>>((item) => {
+      'Ivcode': item['code']?.toString().trim() ?? '',
+      'iname': item['name']?.toString().trim() ?? 'Sản phẩm ${item['code']}',
+      'rvc': item['locationCode']?.toString().trim() ?? '',
+      'rvcname': item['locationName']?.toString().trim() ?? '',
+      'Vend': item['quantity']?.toString().trim() ?? '0',
+      'Vperiod': item['period']?.toString().trim() ?? '',
+      'unit': item['unit']?.toString().trim() ?? 'Cái',
+      'imagePath': item['imagePath']?.toString().trim() ?? '',
+    }).toList();
+
+        // Tự động điền kỳ mới nhất nếu chưa có
+        if (inventoryList.isNotEmpty && _vperiodController.text.trim().isEmpty) {
+          final periods = inventoryList
+              .map((e) => e['Vperiod'])
+              .where((p) => p != null && p.isNotEmpty)
+              .cast<String>()
+              .toSet()
+              .toList();
+          if (periods.isNotEmpty) {
+            periods.sort((a, b) => b.compareTo(a));
+            _vperiodController.text = periods.first;
+          }
+        }
+      });
+    } else {
+      throw Exception('Lỗi server: ${response.statusCode}');
+    }
+  } catch (e) {
+    EasyLoading.showError('Lỗi tải dữ liệu: $e');
+    // Dữ liệu mẫu tạm khi lỗi (có thể xóa sau)
+    setState(() {
+      inventoryList = [
+        {'Ivcode': 'IV001', 'iname': 'Test Product 1', 'Vend': '10', 'imagePath': ''},
+        {'Ivcode': 'IV002', 'iname': 'Test Product 2', 'Vend': '5', 'imagePath': ''},
+      ];
+    });
+  } finally {
+    EasyLoading.dismiss();
+    setState(() => isLoading = false);
+  }
+}
   void _showQRDialog(String ivcode, String iname, String vend) {
     final String qrData = 'HPAPP:$ivcode';
 
@@ -872,21 +964,64 @@ class _QRUpdateScreenState extends State<QRUpdateScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
+                // Dòng 1: Tìm kiếm sản phẩm
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Tìm mã hàng hoặc tên sản phẩm...',
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 12),
+
+                // Dòng 2: Chọn kho + Vperiod
                 Row(
                   children: [
                     Expanded(
-                      child: TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          hintText: 'Tìm Ivcode hoặc tên sản phẩm...',
-                          prefixIcon: const Icon(Icons.search),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-                          filled: true,
-                          fillColor: Colors.grey[100],
-                        ),
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ),
+  child: isLoadingRvc
+      ? const Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.teal),
+          ),
+        )
+      : Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade400),
+            borderRadius: BorderRadius.circular(30),
+            color: Colors.grey[100],
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: selectedRvc,
+              hint: const Text('Chọn kho', style: TextStyle(color: Colors.grey)),
+              isExpanded: true,
+              icon: const Icon(Icons.arrow_drop_down, color: Colors.teal),
+              style: const TextStyle(color: Colors.black87, fontSize: 16),
+              items: rvcList.map((rvc) {
+                return DropdownMenuItem<String>(
+                  value: rvc['RVCno'],
+                  child: Text(
+                    rvc['RVCname']!,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }).toList(),
+              onChanged: (String? newValue) {
+                setState(() {
+                  selectedRvc = newValue;
+                });
+              },
+            ),
+          ),
+        ),
+),
                     const SizedBox(width: 12),
                     SizedBox(
                       width: 120,
@@ -904,11 +1039,16 @@ class _QRUpdateScreenState extends State<QRUpdateScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
+
+                // Nút làm mới
                 ElevatedButton.icon(
                   onPressed: isLoading ? null : _loadInventory,
                   icon: const Icon(Icons.refresh),
                   label: const Text('Làm mới danh sách'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, minimumSize: const Size.fromHeight(50)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    minimumSize: const Size.fromHeight(50),
+                  ),
                 ),
               ],
             ),
@@ -924,124 +1064,76 @@ class _QRUpdateScreenState extends State<QRUpdateScreen> {
                         child: DataTable(
                           headingRowColor: WidgetStateProperty.all(Colors.teal.shade50),
                           dataRowMinHeight: 80,
-                          dataRowMaxHeight: 80,
+                          dataRowMaxHeight: 100,
                           columns: const [
                             DataColumn(label: Text('Mã hàng', style: TextStyle(fontWeight: FontWeight.bold))),
                             DataColumn(label: Text('Tên sản phẩm', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('Đơn vị', style: TextStyle(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text('Kho', style: TextStyle(fontWeight: FontWeight.bold))),
                             DataColumn(label: Text('Tồn kho', style: TextStyle(fontWeight: FontWeight.bold))),
                             DataColumn(label: Text('Ảnh', style: TextStyle(fontWeight: FontWeight.bold))),
                             DataColumn(label: Text('QR', style: TextStyle(fontWeight: FontWeight.bold))),
                           ],
-                          rows: () {
-                            final Map<String, List<Map<String, String>>> groupedByRvc = {};
-                            for (var item in filteredList) {
-                              final rvcKey = item['rvcname']?.trim().isNotEmpty == true
-                                  ? item['rvcname']!.trim()
-                                  : (item['rvc']?.trim() ?? 'Kho không xác định');
-                              groupedByRvc.putIfAbsent(rvcKey, () => []);
-                              groupedByRvc[rvcKey]!.add(item);
-                            }
+                          rows: filteredList.map((item) {
+                            final String ivcode = item['Ivcode'] ?? '';
+                            final String iname = item['iname'] ?? 'Sản phẩm $ivcode';
+                            final String rvcDisplay = item['rvcname']?.trim().isNotEmpty == true
+                                ? item['rvcname']!
+                                : (item['rvc'] ?? 'Kho không tên');
+                            final String vend = item['Vend'] ?? '0';
 
-                            final sortedKeys = groupedByRvc.keys.toList()..sort();
-                            List<DataRow> allRows = [];
-
-                            for (var rvcName in sortedKeys) {
-                              final items = groupedByRvc[rvcName]!;
-
-                              allRows.add(
-                                DataRow(
-                                  color: WidgetStateProperty.all(Colors.teal.shade700),
-                                  cells: [
-                                    DataCell(Padding(
-                                      padding: const EdgeInsets.all(12.0),
-                                      child: Text('KHO: $rvcName',
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.white)),
-                                    )),
-                                    const DataCell(SizedBox()),
-                                    const DataCell(SizedBox()),
-                                    DataCell(Text(
-                                      'Tổng tồn: ${items.fold<int>(0, (sum, e) => sum + (int.tryParse(e['Vend'] ?? '0') ?? 0))} cái',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
-                                    )),
-                                    const DataCell(SizedBox()),
-                                    const DataCell(SizedBox()),
-                                  ],
-                                ),
-                              );
-
-                              for (var item in items) {
-                                final String ivcode = item['Ivcode'] ?? '';
-                                final String iname = item['iname'] ?? 'Sản phẩm $ivcode';
-                                final String vend = item['Vend'] ?? '0';
-
-                                allRows.add(
-                                  DataRow(
-                                    cells: [
-                                      DataCell(Text(ivcode)),
-                                      DataCell(Text(iname)),
-                                      DataCell(Text(item['unit'] ?? 'Cái',
-                                          style: const TextStyle(color: Colors.indigo, fontWeight: FontWeight.w600))),
-                                      DataCell(Text(vend, style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold))),
-                                      DataCell(
-                                        Container(
-                                          width: 80,
-                                          height: 80,
-                                          decoration: BoxDecoration(
-                                            border: Border.all(color: Colors.grey.shade400),
+                            return DataRow(
+                              cells: [
+                                DataCell(Text(ivcode)),
+                                DataCell(Text(iname)),
+                                DataCell(Text(rvcDisplay, style: const TextStyle(fontSize: 13, color: Colors.indigo))),
+                                DataCell(Text(vend, style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16))),
+                                DataCell(
+                                  Container(
+                                    width: 80,
+                                    height: 80,
+                                    decoration: BoxDecoration(
+                                      border: Border.all(color: Colors.grey.shade400),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: item['imagePath']?.isNotEmpty == true
+                                        ? ClipRRect(
                                             borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: item['imagePath']?.isNotEmpty == true
-                                              ? ClipRRect(
-                                                  borderRadius: BorderRadius.circular(12),
-                                                  child: Image.network(
-                                                    '${AppConfig.baseUrl}${item['imagePath']?.startsWith('/') == true ? '' : '/'}${item['imagePath'] ?? ''}',
-                                                    fit: BoxFit.cover,
-                                                    loadingBuilder: (context, child, progress) => progress == null
-                                                        ? child
-                                                        : const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                                                    errorBuilder: (_, _, _) => const Icon(Icons.image, size: 40, color: Colors.grey),
-                                                  ),
-                                                )
-                                              : const Center(
-                                                  child: Column(
-                                                    mainAxisAlignment: MainAxisAlignment.center,
-                                                    children: [
-                                                      Icon(Icons.image_not_supported, size: 40, color: Colors.grey),
-                                                      Text('Chưa có', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                                                    ],
-                                                  ),
-                                                ),
-                                        ),
-                                      ),
-                                      DataCell(
-                                        GestureDetector(
-                                          onTap: () => _showQRDialog(ivcode, iname, vend),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                            decoration: BoxDecoration(
-                                              color: Colors.teal.shade100,
-                                              borderRadius: BorderRadius.circular(20),
-                                              border: Border.all(color: Colors.teal),
+                                            child: Image.network(
+                                              buildImageUrl(item['imagePath']),
+                                              fit: BoxFit.cover,
+                                              loadingBuilder: (context, child, progress) => progress == null
+                                                  ? child
+                                                  : const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                              errorBuilder: (_, _, _) => const Icon(Icons.image_not_supported, size: 40, color: Colors.grey),
                                             ),
-                                            child: const Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(Icons.qr_code_scanner, color: Colors.teal, size: 20),
-                                                SizedBox(width: 8),
-                                                Text('Xem QR', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                                          )
+                                        : const Center(child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey)),
                                   ),
-                                );
-                              }
-                            }
-                            return allRows;
-                          }(),
+                                ),
+                                DataCell(
+                                  GestureDetector(
+                                    onTap: () => _showQRDialog(ivcode, iname, vend),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.teal.shade100,
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(color: Colors.teal),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.qr_code_scanner, color: Colors.teal, size: 20),
+                                          SizedBox(width: 8),
+                                          Text('Xem QR', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }).toList(),
                         ),
                       ),
           ),
@@ -1268,60 +1360,70 @@ class _ImageManagerScreenState extends State<ImageManagerScreen> {
   }
 
   Future<void> _loadInventory() async {
-    if (baseUrl.isEmpty) {
-      EasyLoading.showError('Chưa đăng nhập');
-      return;
-    }
-
-    final vperiod = _vperiodController.text.trim();
-    final search = _searchController.text.trim();
-
-    var url = '$baseUrl/api/inventory';
-    if (vperiod.isNotEmpty || search.isNotEmpty) {
-      final uri = Uri.parse(url).replace(queryParameters: {
-        if (vperiod.isNotEmpty) 'vperiod': vperiod,
-        if (search.isNotEmpty) 'search': search,
-      });
-      url = uri.toString();
-    }
-
-    EasyLoading.show(status: 'Đang tải...');
-    setState(() => isLoading = true);
-
-    try {
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
-      if (response.statusCode == 200) {
-        final List<dynamic> rawData = jsonDecode(response.body);
-        setState(() {
-          inventoryList = rawData.map<Map<String, String>>((item) => {
-                'Ivcode': item['ivcode']?.toString().trim() ?? '',
-                'iname': item['iname']?.toString().trim() ?? 'Sản phẩm ${item['ivcode']}',
-                'Vend': item['vend']?.toString() ?? '0',
-                'imagePath': item['imagePath']?.toString().trim() ?? '',
-                'Vperiod': item['vperiod']?.toString() ?? '',
-              }).toList();
-
-          if (inventoryList.isNotEmpty && _vperiodController.text.trim().isEmpty) {
-            final periods = inventoryList
-                .map((e) => e['Vperiod']?.trim())
-                .where((p) => p != null && p.isNotEmpty)
-                .cast<String>()
-                .toSet()
-                .toList();
-            if (periods.isNotEmpty) {
-              periods.sort((a, b) => b.compareTo(a));
-              _vperiodController.text = periods.first;
-            }
-          }
-        });
-      }
-    } catch (e) {
-      EasyLoading.showError('Lỗi tải dữ liệu: $e');
-    } finally {
-      EasyLoading.dismiss();
-      setState(() => isLoading = false);
-    }
+  if (baseUrl.isEmpty) {
+    EasyLoading.showError('Chưa đăng nhập');
+    return;
   }
+
+  final vperiod = _vperiodController.text.trim();
+  final search = _searchController.text.trim();
+
+  var url = '$baseUrl/api/inventory';
+  if (vperiod.isNotEmpty || search.isNotEmpty) {
+    final uri = Uri.parse(url).replace(queryParameters: {
+      if (vperiod.isNotEmpty) 'vperiod': vperiod,
+      if (search.isNotEmpty) 'search': search,
+    });
+    url = uri.toString();
+  }
+
+  EasyLoading.show(status: 'Đang tải...');
+  setState(() => isLoading = true);
+
+  try {
+    final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
+    if (response.statusCode == 200) {
+      final List<dynamic> rawData = jsonDecode(response.body);
+      setState(() {
+        inventoryList = rawData.map<Map<String, String>>((item) => {
+              'Ivcode': item['code']?.toString().trim() ?? '',
+              'iname': item['name']?.toString().trim() ?? 'Sản phẩm ${item['code']}',
+              'Vend': item['quantity']?.toString().trim() ?? '0',
+              'imagePath': item['imagePath']?.toString().trim() ?? '',
+              'Vperiod': item['period']?.toString().trim() ?? '',
+            }).toList();
+
+        // Tự động điền kỳ mới nhất nếu chưa có
+        if (inventoryList.isNotEmpty && _vperiodController.text.trim().isEmpty) {
+          final periods = inventoryList
+              .map((e) => e['Vperiod'])
+              .where((p) => p != null && p.isNotEmpty)
+              .cast<String>()
+              .toSet()
+              .toList();
+          if (periods.isNotEmpty) {
+            periods.sort((a, b) => b.compareTo(a));
+            _vperiodController.text = periods.first;
+          }
+        }
+      });
+    } else {
+      throw Exception('Lỗi server: ${response.statusCode}');
+    }
+  } catch (e) {
+    EasyLoading.showError('Lỗi tải dữ liệu: $e');
+    // Dữ liệu mẫu tạm khi lỗi (có thể xóa sau)
+    setState(() {
+      inventoryList = [
+        {'Ivcode': 'IV001', 'iname': 'Test Product 1', 'Vend': '10', 'imagePath': ''},
+        {'Ivcode': 'IV002', 'iname': 'Test Product 2', 'Vend': '5', 'imagePath': ''},
+      ];
+    });
+  } finally {
+    EasyLoading.dismiss();
+    setState(() => isLoading = false);
+  }
+}
 
   Future<void> _pickAndUploadImage(String ivcode) async {
     final XFile? pickedFile = await _picker.pickImage(
@@ -1543,7 +1645,7 @@ class _ImageManagerScreenState extends State<ImageManagerScreen> {
                                         ? ClipRRect(
                                             borderRadius: BorderRadius.circular(12),
                                             child: Image.network(
-                                              '${AppConfig.baseUrl}${item['imagePath']?.startsWith('/') == true ? '' : '/'}${item['imagePath'] ?? ''}',
+                                              buildImageUrl(item['imagePath']),
                                               fit: BoxFit.cover,
                                               loadingBuilder: (_, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(strokeWidth: 2)),
                                               errorBuilder: (_, _, _) => const Icon(Icons.image_not_supported, size: 40, color: Colors.grey),
