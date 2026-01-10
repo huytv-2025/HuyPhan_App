@@ -20,7 +20,6 @@ public class InventoryController : ControllerBase
             await connection.OpenAsync();
 
             var sql = @"
-                -- 1. Vật tư tồn kho (Inventory)
                 SELECT 
                     i.VICode AS code,
                     dbo.fTCVNToUnicode(id.IName) AS name,
@@ -31,55 +30,28 @@ public class InventoryController : ControllerBase
                     dbo.fTCVNToUnicode(de.RVCName) AS locationName,
                     q.ImagePath,
                     'Inventory' AS itemType,
-                    q.QRCode  -- Để lấy QR nếu cần
+                    q.QRCode
                 FROM Inventory i
                 LEFT JOIN Itemdef id ON LTRIM(RTRIM(i.VICode)) = LTRIM(RTRIM(id.Icode))
                 LEFT JOIN IUnitDef u ON id.IUnit = u.UnitCode
                 LEFT JOIN QRInventory q ON LTRIM(RTRIM(i.VICode)) = q.Ivcode
                 LEFT JOIN DefRVCList de ON de.RVCNo = i.RVC
                 WHERE 1=1 {0}
-
-                UNION ALL
-
-                -- 2. Tài sản cố định (AssetItem)
-                SELECT 
-                    A.AssetClassCode AS code,
-                    dbo.fTCVNToUnicode(COALESCE(f.IName, A.AssetClassName)) AS name,
-                    dbo.fTCVNToUnicode(ISNULL(u.UnitName, 'Cái')) AS unit,
-                    A.SlvgQty AS quantity,
-                    A.StartPeriod AS period,
-                    A.DepartmentCode AS locationCode,
-                    dbo.fTCVNToUnicode(d.DepartmentName) AS locationName,
-                    q.ImagePath,
-                    'Asset' AS itemType,
-                    q.QRCode
-                FROM AssetItem A
-                LEFT JOIN Department d ON d.DepartmentCode = A.DepartmentCode
-                LEFT JOIN ItemDef f ON f.ICode = A.AssetClassCode
-                LEFT JOIN IUnitDef u ON u.UnitCode = f.IUnit
-                LEFT JOIN QRInventory q ON LTRIM(RTRIM(A.AssetClassCode)) = q.Ivcode
-                WHERE 1=1 {1}
-
                 ORDER BY code";
 
-            string inventoryFilter = "";
-            string assetFilter = "";
+            string filter = "";
 
             if (!string.IsNullOrEmpty(vperiod))
             {
-                inventoryFilter += " AND i.VPeriod = @VPeriod";
-                assetFilter += " AND A.StartPeriod = @VPeriod";
+                filter += " AND i.VPeriod = @VPeriod";
             }
 
             if (!string.IsNullOrEmpty(search))
             {
-                string searchPattern = $"%{search}%";
-                inventoryFilter += @" AND (i.VICode LIKE @Search OR dbo.fTCVNToUnicode(id.IName) LIKE @Search)";
-                assetFilter += @" AND (A.AssetClassCode LIKE @Search 
-                                      OR dbo.fTCVNToUnicode(COALESCE(f.IName, A.AssetClassName)) LIKE @Search)";
+                filter += @" AND (i.VICode LIKE @Search OR dbo.fTCVNToUnicode(id.IName) LIKE @Search)";
             }
 
-            sql = string.Format(sql, inventoryFilter, assetFilter);
+            sql = string.Format(sql, filter);
 
             await using var command = new SqlCommand(sql, connection);
 
@@ -94,9 +66,6 @@ public class InventoryController : ControllerBase
             var list = new List<object>();
             while (await reader.ReadAsync())
             {
-                string itemType = reader["itemType"]?.ToString() ?? "Inventory";
-                string prefix = itemType == "Asset" ? "HPASSET:" : "HPAPP:";
-
                 list.Add(new
                 {
                     code = reader["code"]?.ToString()?.Trim() ?? "",
@@ -107,8 +76,8 @@ public class InventoryController : ControllerBase
                     locationCode = reader["locationCode"]?.ToString()?.Trim() ?? "",
                     locationName = reader["locationName"]?.ToString()?.Trim() ?? "",
                     imagePath = reader["ImagePath"]?.ToString()?.Trim() ?? "",
-                    itemType,  // Inventory hoặc Asset
-                    qrCode = reader["QRCode"]?.ToString()?.Trim() ?? $"{prefix}{reader["code"]}"
+                    itemType = "Inventory",
+                    qrCode = reader["QRCode"]?.ToString()?.Trim() ?? $"HPAPP:{reader["code"]}"
                 });
             }
 
@@ -120,7 +89,7 @@ public class InventoryController : ControllerBase
         }
     }
 
-    // POST: api/inventory/search (Quét QR - hỗ trợ cả vật tư và tài sản)
+    // POST: api/inventory/search (Chỉ hỗ trợ quét QR vật tư)
     [HttpPost("search")]
     public async Task<IActionResult> SearchByQR([FromBody] QRRequest request)
     {
@@ -129,40 +98,16 @@ public class InventoryController : ControllerBase
 
         string qrInput = request.QRCode.Trim();
 
-        // Xử lý tiền tố
-        bool isAsset = qrInput.StartsWith("HPASSET:", StringComparison.OrdinalIgnoreCase);
-        bool isInventory = qrInput.StartsWith("HPAPP:", StringComparison.OrdinalIgnoreCase);
-
-        string code = qrInput;
-        if (isAsset) code = qrInput.Substring(8);
-        else if (isInventory) code = qrInput.Substring(6);
+        // Bỏ tiền tố nếu có
+        if (qrInput.StartsWith("HPAPP:", StringComparison.OrdinalIgnoreCase))
+            qrInput = qrInput.Substring(6);
 
         try
         {
             await using var connection = new SqlConnection(_connectionString);
             await connection.OpenAsync();
 
-            string query = isAsset ? @"
-                -- Tìm tài sản
-                SELECT 
-                    A.AssetClassCode AS code,
-                    dbo.fTCVNToUnicode(COALESCE(f.IName, A.AssetClassName)) AS name,
-                    dbo.fTCVNToUnicode(ISNULL(u.UnitName, 'Cái')) AS unit,
-                    A.SlvgQty AS quantity,
-                    A.StartPeriod AS period,
-                    A.DepartmentCode AS locationCode,
-                    dbo.fTCVNToUnicode(d.DepartmentName) AS locationName,
-                    q.ImagePath,
-                    'Asset' AS itemType
-                FROM AssetItem A
-                LEFT JOIN Department d ON d.DepartmentCode = A.DepartmentCode
-                LEFT JOIN ItemDef f ON f.ICode = A.AssetClassCode
-                LEFT JOIN IUnitDef u ON u.UnitCode = f.IUnit
-                LEFT JOIN QRInventory q ON LTRIM(RTRIM(A.AssetClassCode)) = q.Ivcode
-                WHERE LTRIM(RTRIM(A.AssetClassCode)) = @Code"
-
-                : @"
-                -- Tìm vật tư
+            const string query = @"
                 SELECT 
                     i.VICode AS code,
                     dbo.fTCVNToUnicode(id.IName) AS name,
@@ -181,16 +126,13 @@ public class InventoryController : ControllerBase
                 WHERE LTRIM(RTRIM(i.VICode)) = @Code";
 
             await using var command = new SqlCommand(query, connection);
-            command.Parameters.AddWithValue("@Code", code.Trim());
+            command.Parameters.AddWithValue("@Code", qrInput.Trim());
 
             await using var reader = await command.ExecuteReaderAsync();
 
             var results = new List<object>();
             while (await reader.ReadAsync())
             {
-                string itemType = reader["itemType"]?.ToString() ?? "Inventory";
-                string prefix = itemType == "Asset" ? "HPASSET:" : "HPAPP:";
-
                 results.Add(new
                 {
                     code = reader["code"]?.ToString()?.Trim() ?? "",
@@ -201,8 +143,8 @@ public class InventoryController : ControllerBase
                     locationCode = reader["locationCode"]?.ToString()?.Trim() ?? "",
                     locationName = reader["locationName"]?.ToString()?.Trim() ?? "",
                     imagePath = reader["ImagePath"]?.ToString()?.Trim() ?? "",
-                    itemType,
-                    qrCode = $"{prefix}{reader["code"]}"
+                    itemType = "Inventory",
+                    qrCode = $"HPAPP:{reader["code"]}"
                 });
             }
 
@@ -217,128 +159,103 @@ public class InventoryController : ControllerBase
         }
     }
 
-    // POST: api/inventory/generate-batch (hỗ trợ cả vật tư và tài sản)
+    // POST: api/inventory/generate-batch (Chỉ hỗ trợ vật tư)
     [HttpPost("generate-batch")]
-public async Task<IActionResult> GenerateBatchQR([FromBody] GenerateBatchRequest request)
-{
-    if (request?.Codes == null || !request.Codes.Any())
-        return BadRequest(new { success = false, message = "Danh sách mã trống" });
-
-    try
+    public async Task<IActionResult> GenerateBatchQR([FromBody] GenerateBatchRequest request)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-        await using var transaction = await connection.BeginTransactionAsync();;
+        if (request?.Codes == null || !request.Codes.Any())
+            return BadRequest(new { success = false, message = "Danh sách mã trống" });
 
-        // Câu SQL chuẩn, rõ ràng, đảm bảo tất cả các trường được gán giá trị đúng
-        const string sql = @"
-            MERGE QRInventory AS target
-            USING (SELECT @Code AS Ivcode, @QRCode AS QRCode) AS source
-            ON target.Ivcode = source.Ivcode
-            WHEN MATCHED THEN
-                UPDATE SET 
-                    QRCode = source.QRCode,
-                    CreatedDate = GETDATE(),
-                    CreatedBy = @CreatedBy,
-                    IsActive = 1
-            WHEN NOT MATCHED THEN
-                INSERT (Ivcode, QRCode, CreatedBy, CreatedDate, IsActive, ImagePath)
-                VALUES (source.Ivcode, source.QRCode, @CreatedBy, GETDATE(), 1, NULL);";
-
-        int count = 0;
-        foreach (var item in request.Codes)
+        try
         {
-            string code = item.Code.Trim();
-            if (string.IsNullOrEmpty(code)) continue;
+            await using var connection = new SqlConnection(_connectionString);
+            await connection.OpenAsync();
+            await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
 
-            string prefix = item.Type == "Asset" ? "HPASSET:" : "HPAPP:";
-            string qrData = $"{prefix}{code}";
+            const string sql = @"
+                IF EXISTS (SELECT 1 FROM QRInventory WHERE Ivcode = @Code)
+                    UPDATE QRInventory SET QRCode = @QRCode, CreatedDate = GETDATE(), CreatedBy = @CreatedBy
+                    WHERE Ivcode = @Code
+                ELSE
+                    INSERT INTO QRInventory (Ivcode, QRCode, CreatedBy, CreatedDate, IsActive)
+                    VALUES (@Code, @QRCode, @CreatedBy, GETDATE(), 1)";
 
-            await using var cmd = new SqlCommand(sql, connection, (SqlTransaction)transaction);
-            cmd.Parameters.AddWithValue("@Code", code);
-            cmd.Parameters.AddWithValue("@QRCode", qrData);
-            cmd.Parameters.AddWithValue("@CreatedBy", request.CreatedBy ?? "MobileApp");
+            int count = 0;
+            foreach (var code in request.Codes)
+            {
+                string trimmedCode = code.Trim();
+                string qrData = $"HPAPP:{trimmedCode}";
 
-            await cmd.ExecuteNonQueryAsync();
-            count++;
+                await using var cmd = new SqlCommand(sql, connection, transaction);
+                cmd.Parameters.AddWithValue("@Code", trimmedCode);
+                cmd.Parameters.AddWithValue("@QRCode", qrData);
+                cmd.Parameters.AddWithValue("@CreatedBy", request.CreatedBy ?? "System");
+
+                await cmd.ExecuteNonQueryAsync();
+                count++;
+            }
+
+            await transaction.CommitAsync();
+
+            return Ok(new
+            {
+                success = true,
+                message = $"Đã tạo/cập nhật QR cho {count} mục thành công!"
+            });
         }
-
-        await transaction.CommitAsync();
-
-        return Ok(new
+        catch (Exception ex)
         {
-            success = true,
-            message = $"Đã tạo/cập nhật QR cho {count} mục thành công!"
-        });
+            return StatusCode(500, new { success = false, message = "Lỗi server: " + ex.Message });
+        }
     }
-    catch (Exception ex)
-    {
-        return StatusCode(500, new { success = false, message = "Lỗi server: " + ex.Message });
-    }
-}
 
     // POST: api/inventory/upload-image
     [HttpPost("upload-image")]
-public async Task<IActionResult> UploadImage([FromForm] IFormFile file, [FromForm] string code, [FromForm] string type = "Inventory")
-{
-    if (file == null || file.Length == 0)
-        return BadRequest(new { success = false, message = "Chưa chọn ảnh" });
-
-    if (string.IsNullOrWhiteSpace(code))
-        return BadRequest(new { success = false, message = "Thiếu mã hàng" });
-
-    try
+    public async Task<IActionResult> UploadImage([FromForm] IFormFile file, [FromForm] string code)
     {
-        var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "products");
-        Directory.CreateDirectory(uploadsFolder);
+        if (file == null || file.Length == 0)
+            return BadRequest(new { success = false, message = "Chưa chọn ảnh" });
 
-        var fileName = $"{code.Trim()}_{DateTime.Now:yyyyMMddHHmmss}{Path.GetExtension(file.FileName)}";
-        var filePath = Path.Combine(uploadsFolder, fileName);
+        if (string.IsNullOrWhiteSpace(code))
+            return BadRequest(new { success = false, message = "Thiếu mã hàng" });
 
-        await using (var stream = new FileStream(filePath, FileMode.Create))
+        try
         {
-            await file.CopyToAsync(stream);
+            var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "products");
+            Directory.CreateDirectory(uploadsFolder);
+
+            var fileName = $"{code.Trim()}_{DateTime.Now:yyyyMMddHHmmss}{Path.GetExtension(file.FileName)}";
+            var filePath = Path.Combine(uploadsFolder, fileName);
+            await using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            var imageUrl = $"/images/products/{fileName}";
+
+            await using var connection = new SqlConnection(_connectionString);
+            await connection.OpenAsync();
+
+            const string sql = @"
+                IF EXISTS (SELECT 1 FROM QRInventory WHERE Ivcode = @Code)
+                    UPDATE QRInventory SET ImagePath = @ImagePath WHERE Ivcode = @Code
+                ELSE
+                    INSERT INTO QRInventory (Ivcode, QRCode, ImagePath, CreatedBy, CreatedDate, IsActive)
+                    VALUES (@Code, 'HPAPP:' + @Code, @ImagePath, 'App', GETDATE(), 1)";
+
+            await using var cmd = new SqlCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@Code", code.Trim());
+            cmd.Parameters.AddWithValue("@ImagePath", imageUrl);
+
+            await cmd.ExecuteNonQueryAsync();
+
+            return Ok(new { success = true, message = "Tải ảnh thành công!", imageUrl });
         }
-
-        var imageUrl = $"/images/products/{fileName}";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var transaction = await connection.BeginTransactionAsync();
-
-string prefix = type == "Asset" ? "HPASSET:" : "HPAPP:";
-string qrData = $"{prefix}{code.Trim()}";
-
-const string sql = @"
-    MERGE QRInventory AS target
-    USING (SELECT @Code AS Ivcode) AS source
-    ON target.Ivcode = source.Ivcode
-    WHEN MATCHED THEN
-        UPDATE SET 
-            ImagePath = @ImagePath,
-            CreatedDate = GETDATE(),
-            CreatedBy = 'MobileApp',
-            IsActive = 1
-    WHEN NOT MATCHED THEN
-        INSERT (Ivcode, QRCode, ImagePath, CreatedBy, CreatedDate, IsActive)
-        VALUES (@Code, @QRCode, @ImagePath, 'MobileApp', GETDATE(), 1);";
-
-await using var cmd = new SqlCommand(sql, connection, (SqlTransaction)transaction);
-cmd.Parameters.AddWithValue("@Code", code.Trim());
-cmd.Parameters.AddWithValue("@ImagePath", imageUrl);
-cmd.Parameters.AddWithValue("@QRCode", qrData);
-
-await cmd.ExecuteNonQueryAsync();
-await transaction.CommitAsync();
-
-        return Ok(new { success = true, message = "Tải ảnh thành công!", imageUrl });
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Lỗi: " + ex.Message });
+        }
     }
-    catch (Exception ex)
-    {
-        return StatusCode(500, new { success = false, message = "Lỗi: " + ex.Message });
-    }
-}
 
     // ------------------ Models ------------------
     public class QRRequest
@@ -346,15 +263,9 @@ await transaction.CommitAsync();
         public string QRCode { get; set; } = string.Empty;
     }
 
-    public class GenerateBatchItem
-    {
-        public string Code { get; set; } = string.Empty;
-        public string Type { get; set; } = "Inventory"; // "Inventory" hoặc "Asset"
-    }
-
     public class GenerateBatchRequest
     {
-        public List<GenerateBatchItem> Codes { get; set; } = new();
+        public List<string> Codes { get; set; } = new();
         public string? CreatedBy { get; set; }
     }
 }

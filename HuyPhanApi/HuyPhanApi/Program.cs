@@ -1,8 +1,15 @@
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+        .AddJsonOptions(options =>
+    {
+        // Bật binding không phân biệt chữ hoa/thường (camelCase / PascalCase)
+        options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
 
+        // Tùy chọn: nếu muốn response trả về camelCase
+        // options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
