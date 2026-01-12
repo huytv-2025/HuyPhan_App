@@ -23,7 +23,7 @@ public class InventoryController : ControllerBase
                 SELECT 
                     i.VICode AS code,
                     dbo.fTCVNToUnicode(id.IName) AS name,
-                    ISNULL(u.UnitName, 'Cái') AS unit,
+                    dbo.fTCVNToUnicode(ISNULL(u.UnitName, 'Cái')) AS unit,
                     i.VEnd AS quantity,
                     i.VPeriod AS period,
                     i.RVC AS locationCode,
