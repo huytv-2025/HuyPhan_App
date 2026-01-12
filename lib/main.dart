@@ -1072,19 +1072,50 @@ class QRScanScreen extends StatefulWidget {
   @override
   State<QRScanScreen> createState() => _QRScanScreenState();
 }
+String formatCleanQty(dynamic qty) {
+  if (qty == null || qty == 0) return '0';
 
+  // Chuyển thành chuỗi, loại bỏ dấu phẩy (nếu có từ dữ liệu cũ)
+  String str = qty.toString().replaceAll(',', '');
+
+  // Nếu không có dấu chấm → trả về nguyên bản (số nguyên)
+  if (!str.contains('.')) {
+    return str;
+  }
+
+  // Tách phần nguyên và thập phân
+  final parts = str.split('.');
+  final integerPart = parts[0];
+  String decimalPart = parts.length > 1 ? parts[1] : '';
+
+  // Nếu phần thập phân toàn 0 → chỉ giữ phần nguyên
+  if (decimalPart.replaceAll('0', '').isEmpty) {
+    return integerPart;
+  }
+
+  // Nếu có thập phân thực → loại bỏ 0 thừa ở cuối, và loại bỏ dấu chấm nếu không còn thập phân
+  decimalPart = decimalPart.replaceAll(RegExp(r'0+$'), '');
+  if (decimalPart.isEmpty) {
+    return integerPart;
+  }
+
+  return '$integerPart.$decimalPart';
+}
 class _QRScanScreenState extends State<QRScanScreen> {
   MobileScannerController cameraController = MobileScannerController(facing: CameraFacing.back, torchEnabled: false);
   bool _isScanning = true;
   String? _scanResult;
   Map<String, dynamic>? itemData;
   String get baseUrl => AppConfig.baseUrl;
+  List<Map<String, dynamic>> _multiLocationItems = [];
   String? _scanMessage;
+
   Future<void> _searchInventory(String qrData) async {
   if (!qrData.startsWith('HPAPP:')) {
     setState(() {
       _scanResult = 'QR không hợp lệ\n(Yêu cầu định dạng: HPAPP:mã_hàng)';
-      itemData = null;
+      itemData = null;  
+      _multiLocationItems = []; // Thêm biến mới
     });
     return;
   }
@@ -1101,55 +1132,68 @@ class _QRScanScreenState extends State<QRScanScreen> {
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-
       if (data['success'] == true) {
-        // Luôn lấy 'data' là List (backend trả List)
         final List<dynamic> rawList = (data['data'] as List?) ?? [];
 
         if (rawList.isEmpty) {
           setState(() {
             _scanResult = 'Không tìm thấy sản phẩm với mã $ivcode';
             itemData = null;
+            _multiLocationItems = [];
           });
           return;
         }
 
-        // Lấy sản phẩm đầu tiên (nếu có nhiều thì chỉ lấy cái đầu)
-        final Map<String, dynamic> item = Map<String, dynamic>.from(rawList[0]);
+        // Tính tổng tồn
+        double totalQty = 0;
+        for (var item in rawList) {
+          totalQty += double.tryParse(item['quantity']?.toString() ?? '0') ?? 0;
+        }
 
-        itemData = item;
+        // Chuẩn bị danh sách chi tiết từng kho
+        final List<Map<String, dynamic>> locations = rawList.map((item) {
+          return {
+            'locationCode': item['locationCode']?.toString().trim() ?? '',
+            'locationName': item['locationName']?.toString().trim() ?? 'Không xác định',
+            'quantity': item['quantity']?.toString() ?? '0',
+            'imagePath': item['imagePath']?.toString().trim() ?? '',
+          };
+        }).toList();
 
+        // Lấy thông tin chung (từ item đầu tiên)
+        final firstItem = Map<String, dynamic>.from(rawList[0]);
         setState(() {
-          String rvcDisplay = item['locationName'] ?? item['rvc'] ?? 'Không có';
-          int totalCount = rawList.length;
-          String resultText =
-              'Mã hàng: ${item['code'] ?? 'Không có'}\n'
-              'RVC: $rvcDisplay\n'
-              'Tên SP: ${item['name'] ?? 'Không có tên'}\n'
-              'Tồn kho: ${item['quantity'] ?? '0'} cái';
+          itemData = firstItem;
+          _multiLocationItems = locations; // Lưu danh sách kho để hiển thị ListView
 
-          if (totalCount > 1) {
-            resultText += '\n\n(Có $totalCount kho chứa sản phẩm này)';
-          }
+          _scanResult = '''
+          Mã hàng: ${firstItem['code'] ?? ivcode}
+          Tên sản phẩm: ${firstItem['name'] ?? 'Không có tên'}
+          TỔNG TỒN TẤT CẢ KHO: ${formatCleanQty(totalQty)}
+          Có mặt tại ${rawList.length} kho:
+                    '''.trim();
 
-          _scanResult = resultText;
-        });
-      } else {
+                    _scanMessage = null;
+                  });
+                } else {
         setState(() {
           _scanResult = data['message'] ?? 'Không tìm thấy sản phẩm';
           itemData = null;
+          _multiLocationItems = [];
         });
       }
     } else {
       setState(() {
         _scanResult = 'Lỗi server: ${response.statusCode}';
         itemData = null;
+        _multiLocationItems = [];
       });
     }
   } catch (e) {
     setState(() {
       _scanResult = 'Lỗi kết nối: $e';
       itemData = null;
+      _multiLocationItems = [];
     });
   }
 }
@@ -1172,7 +1216,7 @@ class _QRScanScreenState extends State<QRScanScreen> {
       body: Column(
         children: [
           Expanded(
-            flex: 5,
+            flex: 3,
             child: MobileScanner(
               controller: cameraController,
               onDetect: (capture) {
@@ -1188,13 +1232,13 @@ class _QRScanScreenState extends State<QRScanScreen> {
             ),
           ),
           Expanded(
-            flex: 2,
-            child: SingleChildScrollView(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (_scanMessage != null)
+  flex: 3,
+  child: SingleChildScrollView(
+    child: Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (_scanMessage != null)
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Text(
@@ -1207,65 +1251,108 @@ class _QRScanScreenState extends State<QRScanScreen> {
                 textAlign: TextAlign.center,
               ),
             ),
-                    if (_scanResult != null)
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Card(
-                          elevation: 8,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          child: Padding(
-                            padding: const EdgeInsets.all(20.0),
-                            child: Column(
-                              children: [
-                                Builder(builder: (context) {
-                                  final Map<String, dynamic>? localItemData = itemData;
-                                  if (localItemData == null) {
-                                    return const Icon(Icons.image_not_supported, size: 100, color: Colors.grey);
-                                  }
-                                  final dynamic imagePathValue = localItemData['imagePath'];
-                                  if (imagePathValue is! String || imagePathValue.toString().trim().isEmpty) {
-                                    return const Icon(Icons.image_not_supported, size: 100, color: Colors.grey);
-                                  }
-                                  final String imageUrl = buildImageUrl(imagePathValue.toString().trim());
-                                  return ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Image.network(
-                                      imageUrl,
-                                      width: 200,
-                                      height: 200,
-                                      fit: BoxFit.cover,
-                                      loadingBuilder: (context, child, progress) => const Center(child: CircularProgressIndicator(color: Colors.teal)),
-                                      errorBuilder: (context, error, stackTrace) => const Icon(Icons.image_not_supported, size: 100, color: Colors.grey),
-                                    ),
-                                  );
-                                }),
-                                const SizedBox(height: 20),
-                                SelectableText(_scanResult!, style: const TextStyle(fontSize: 18, color: Colors.black87), textAlign: TextAlign.center),
-                              ],
-                            ),
+
+          if (_scanResult != null)
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Card(
+                elevation: 8,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Ảnh sản phẩm (lấy từ item đầu tiên hoặc kho có ảnh)
+                      if (itemData != null && itemData!['imagePath']?.toString().trim().isNotEmpty == true)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            buildImageUrl(itemData!['imagePath'].toString().trim()),
+                            width: double.infinity,
+                            height: 140,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => const Icon(Icons.image_not_supported, size: 100),
+                          ),
+                        )
+                      else
+                        const Icon(Icons.image_not_supported, size: 100, color: Colors.grey),
+
+                      const SizedBox(height: 16),
+
+                      // Thông tin chính + tổng tồn
+                      SelectableText(
+                        _scanResult!,
+                        style: const TextStyle(fontSize: 16, color: Colors.black87),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // ListView hiển thị chi tiết từng kho
+                      if (_multiLocationItems.isNotEmpty)
+                        Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          constraints: const BoxConstraints(maxHeight: 180), // Giới hạn chiều cao nếu quá nhiều kho
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: _multiLocationItems.length,
+                            itemBuilder: (context, index) {
+                              final loc = _multiLocationItems[index];
+                              final qty = double.tryParse(loc['quantity'] ?? '0') ?? 0;
+                              return ListTile(
+                                dense: true,
+                                leading: const Icon(Icons.warehouse, color: Colors.teal, size: 28),
+                                title: Text(
+                                  loc['locationName'] ?? 'Kho không xác định',
+                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                                trailing: Text(
+                                  '${formatCleanQty(qty)} cái',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: qty > 0 ? Colors.green.shade700 : Colors.red,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ),
+
+                      const SizedBox(height: 20),
+
+                      // Nút quét lại
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _isScanning = true;
+                            _scanResult = null;
+                            itemData = null;
+                            _multiLocationItems = [];
+                            _scanMessage = null;
+                          });
+                          cameraController.start();
+                        },
+                        icon: const Icon(Icons.qr_code_scanner),
+                        label: const Text('Quét lại', style: TextStyle(fontSize: 18)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal,
+                          minimumSize: const Size(double.infinity, 50),
+                        ),
                       ),
-                    const SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _isScanning = true;
-                          _scanResult = null;
-                          itemData = null;
-                          _scanMessage = null;
-                        });
-                        cameraController.start();
-                      },
-                      icon: const Icon(Icons.qr_code_scanner),
-                      label: const Text('Quét lại', style: TextStyle(fontSize: 18)),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
+        ],
+      ),
+    ),
+  ),
+),
         ],
       ),
     );
@@ -1380,7 +1467,7 @@ class _SaleOrderScreenState extends State<SaleOrderScreen> {
                   Expanded(
                     flex: 4,
                     child: Padding(
-                      padding: const EdgeInsets.all(20.0),
+                      padding: const EdgeInsets.all(16.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [

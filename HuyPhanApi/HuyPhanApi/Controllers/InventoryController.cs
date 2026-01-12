@@ -211,51 +211,52 @@ public class InventoryController : ControllerBase
 
     // POST: api/inventory/upload-image
     [HttpPost("upload-image")]
-    public async Task<IActionResult> UploadImage([FromForm] IFormFile file, [FromForm] string code)
+public async Task<IActionResult> UploadImage([FromForm] IFormFile file, [FromForm] string ivcode)  // ← đã đổi thành ivcode
+{
+    if (file == null || file.Length == 0)
+        return BadRequest(new { success = false, message = "Chưa chọn ảnh" });
+
+    if (string.IsNullOrWhiteSpace(ivcode))  // ← sửa: code → ivcode
+        return BadRequest(new { success = false, message = "Thiếu mã hàng" });
+
+    try
     {
-        if (file == null || file.Length == 0)
-            return BadRequest(new { success = false, message = "Chưa chọn ảnh" });
+        var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "products");
+        Directory.CreateDirectory(uploadsFolder);
 
-        if (string.IsNullOrWhiteSpace(code))
-            return BadRequest(new { success = false, message = "Thiếu mã hàng" });
+        var fileName = $"{ivcode.Trim()}_{DateTime.Now:yyyyMMddHHmmss}{Path.GetExtension(file.FileName)}";  // ← sửa: code → ivcode
+        var filePath = Path.Combine(uploadsFolder, fileName);
 
-        try
+        await using (var stream = new FileStream(filePath, FileMode.Create))
         {
-            var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "products");
-            Directory.CreateDirectory(uploadsFolder);
-
-            var fileName = $"{code.Trim()}_{DateTime.Now:yyyyMMddHHmmss}{Path.GetExtension(file.FileName)}";
-            var filePath = Path.Combine(uploadsFolder, fileName);
-            await using (var stream = new FileStream(filePath, FileMode.Create))
-            {
-                await file.CopyToAsync(stream);
-            }
-
-            var imageUrl = $"/images/products/{fileName}";
-
-            await using var connection = new SqlConnection(_connectionString);
-            await connection.OpenAsync();
-
-            const string sql = @"
-                IF EXISTS (SELECT 1 FROM QRInventory WHERE Ivcode = @Code)
-                    UPDATE QRInventory SET ImagePath = @ImagePath WHERE Ivcode = @Code
-                ELSE
-                    INSERT INTO QRInventory (Ivcode, QRCode, ImagePath, CreatedBy, CreatedDate, IsActive)
-                    VALUES (@Code, 'HPAPP:' + @Code, @ImagePath, 'App', GETDATE(), 1)";
-
-            await using var cmd = new SqlCommand(sql, connection);
-            cmd.Parameters.AddWithValue("@Code", code.Trim());
-            cmd.Parameters.AddWithValue("@ImagePath", imageUrl);
-
-            await cmd.ExecuteNonQueryAsync();
-
-            return Ok(new { success = true, message = "Tải ảnh thành công!", imageUrl });
+            await file.CopyToAsync(stream);
         }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { success = false, message = "Lỗi: " + ex.Message });
-        }
+
+        var imageUrl = $"/images/products/{fileName}";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        const string sql = @"
+            IF EXISTS (SELECT 1 FROM QRInventory WHERE Ivcode = @Ivcode)
+                UPDATE QRInventory SET ImagePath = @ImagePath WHERE Ivcode = @Ivcode
+            ELSE
+                INSERT INTO QRInventory (Ivcode, QRCode, ImagePath, CreatedBy, CreatedDate, IsActive)
+                VALUES (@Ivcode, 'HPAPP:' + @Ivcode, @ImagePath, 'App', GETDATE(), 1)";
+
+        await using var cmd = new SqlCommand(sql, connection);
+        cmd.Parameters.AddWithValue("@Ivcode", ivcode.Trim());  // ← sửa: @Code → @Ivcode, code → ivcode
+        cmd.Parameters.AddWithValue("@ImagePath", imageUrl);
+
+        await cmd.ExecuteNonQueryAsync();
+
+        return Ok(new { success = true, message = "Tải ảnh thành công!", imageUrl });
     }
+    catch (Exception ex)
+    {
+        return StatusCode(500, new { success = false, message = "Lỗi: " + ex.Message });
+    }
+}
 
     // ------------------ Models ------------------
     public class QRRequest
