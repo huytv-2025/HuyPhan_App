@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "539268712948",
+    "project_id": "huyphan-47e6b",
+    "storage_bucket": "huyphan-47e6b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:539268712948:android:9e438af66b4a539ea911a1",
+        "android_client_info": {
+          "package_name": "com.example.huyphan_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDfbMdFPKbQzn8ARwSAFQIgrFA8Js4MPNw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

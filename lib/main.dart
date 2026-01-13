@@ -7,6 +7,11 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+
+
 
 
 // Global lưu base URL sau khi login thành công
@@ -16,7 +21,13 @@ class AppConfig {
 
 // ignore_for_file: avoid_print
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized(); // Bắt buộc cho async trong main
+
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
   runApp(const MyApp());
 }
 
@@ -131,6 +142,30 @@ class _LoginScreenState extends State<LoginScreen> {
       ).timeout(const Duration(seconds: 15));
       final data = jsonDecode(response.body);
       if (response.statusCode == 200 && data['success'] == true) {
+        // ── THÊM ĐOẠN CODE NÀY VÀO ĐÂY ────────────────────────────────
+      String? fcmToken = await FirebaseMessaging.instance.getToken();
+      if (fcmToken != null && clerkId.isNotEmpty) {
+        try {
+          final tokenResponse = await http.post(
+           Uri.parse('${AppConfig.baseUrl}/api/user/save-fcm-token'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'ClerkID': clerkId,
+              'FcmToken': fcmToken,
+              'DeviceType': 'mobile',  // hoặc thêm logic Platform.isAndroid ? 'android' : 'ios'
+            }),
+          );
+          
+          if (tokenResponse.statusCode == 200) {
+            print('FCM token saved to server successfully');
+          } else {
+            print('Lỗi lưu FCM token: ${tokenResponse.statusCode} - ${tokenResponse.body}');
+          }
+        } catch (e) {
+          print('Lỗi khi gửi FCM token lên server: $e');
+        }
+      }
+
         if (mounted) {
           Navigator.pushReplacement(
             context,

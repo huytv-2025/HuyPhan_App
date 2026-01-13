@@ -27,7 +27,7 @@ public class InventoryController : ControllerBase
                     i.VEnd AS quantity,
                     i.VPeriod AS period,
                     i.RVC AS locationCode,
-                    dbo.fTCVNToUnicode(de.RVCName) AS locationName,
+                    dbo.fTCVNToUnicode(rvc.RVCName) AS locationName,
                     q.ImagePath,
                     'Inventory' AS itemType,
                     q.QRCode
@@ -35,8 +35,8 @@ public class InventoryController : ControllerBase
                 LEFT JOIN Itemdef id ON LTRIM(RTRIM(i.VICode)) = LTRIM(RTRIM(id.Icode))
                 LEFT JOIN IUnitDef u ON id.IUnit = u.UnitCode
                 LEFT JOIN QRInventory q ON LTRIM(RTRIM(i.VICode)) = q.Ivcode
-                LEFT JOIN DefRVCList de ON de.RVCNo = i.RVC
-                WHERE 1=1 {0}
+                LEFT JOIN DefRVCList rvc ON rvc.RVCNo = i.RVC
+                WHERE 1=1 {0} AND (i.VOpen <> 0 OR i.VIn <> 0 OR i.VOut <> 0 OR i.VEnd <> 0)
                 ORDER BY code";
 
             string filter = "";

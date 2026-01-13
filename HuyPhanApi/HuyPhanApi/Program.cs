@@ -1,3 +1,4 @@
+using HuyPhanApi.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -12,6 +13,7 @@ builder.Services.AddControllers()
     });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddSingleton<FcmService>();
 
 // Bật CORS để Flutter và Swagger gọi được API
 builder.Services.AddCors(options =>
@@ -25,6 +27,7 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+var fcmService = app.Services.GetRequiredService<FcmService>();
 app.UseStaticFiles();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

@@ -6,6 +6,7 @@ C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\publ
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\publish\web.config
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\appsettings.Development.json
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\appsettings.json
+C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\firebase-adminsdk.json
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\publish\appsettings.Development.json
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\publish\appsettings.json
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\publish\HuyPhanApi.deps.json
@@ -45,6 +46,12 @@ C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\HuyP
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\HuyPhanApi.pdb
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Azure.Core.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Azure.Identity.dll
+C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\FirebaseAdmin.dll
+C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Google.Api.Gax.dll
+C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Google.Api.Gax.Rest.dll
+C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Google.Apis.dll
+C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Google.Apis.Auth.dll
+C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Google.Apis.Core.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Microsoft.AspNetCore.OpenApi.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Microsoft.Bcl.AsyncInterfaces.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Microsoft.Bcl.Cryptography.dll
@@ -59,12 +66,15 @@ C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Micr
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Microsoft.IdentityModel.Tokens.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Microsoft.OpenApi.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Microsoft.SqlServer.Server.dll
+C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Newtonsoft.Json.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Swashbuckle.AspNetCore.Swagger.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Swashbuckle.AspNetCore.SwaggerGen.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\Swashbuckle.AspNetCore.SwaggerUI.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\System.ClientModel.dll
+C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\System.CodeDom.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\System.Configuration.ConfigurationManager.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\System.IdentityModel.Tokens.Jwt.dll
+C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\System.Management.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\System.Memory.Data.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\System.Security.Cryptography.ProtectedData.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\cs\Microsoft.Data.SqlClient.resources.dll
@@ -85,6 +95,7 @@ C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\runt
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\runtimes\win-arm64\native\Microsoft.Data.SqlClient.SNI.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\runtimes\win-x64\native\Microsoft.Data.SqlClient.SNI.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\runtimes\win-x86\native\Microsoft.Data.SqlClient.SNI.dll
+C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\bin\Debug\net10.0\runtimes\win\lib\net7.0\System.Management.dll
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\obj\Debug\net10.0\HuyPhanApi.csproj.AssemblyReference.cache
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\obj\Debug\net10.0\rpswa.dswa.cache.json
 C:\dev\flutter_projects\huyphan_app\HuyPhanApi\HuyPhanApi\obj\Debug\net10.0\HuyPhanApi.GeneratedMSBuildEditorConfig.editorconfig

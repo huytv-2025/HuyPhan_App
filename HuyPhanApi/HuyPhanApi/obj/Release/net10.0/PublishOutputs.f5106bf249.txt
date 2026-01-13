@@ -7,6 +7,7 @@ C:\HuyPhanApiPublish\publish\publish\web.config
 C:\HuyPhanApiPublish\publish\web.config
 C:\HuyPhanApiPublish\appsettings.Development.json
 C:\HuyPhanApiPublish\appsettings.json
+C:\HuyPhanApiPublish\firebase-adminsdk.json
 C:\HuyPhanApiPublish\publish\appsettings.Development.json
 C:\HuyPhanApiPublish\publish\appsettings.json
 C:\HuyPhanApiPublish\publish\HuyPhanApi.deps.json
@@ -43,6 +44,12 @@ C:\HuyPhanApiPublish\HuyPhanApi.runtimeconfig.json
 C:\HuyPhanApiPublish\HuyPhanApi.pdb
 C:\HuyPhanApiPublish\Azure.Core.dll
 C:\HuyPhanApiPublish\Azure.Identity.dll
+C:\HuyPhanApiPublish\FirebaseAdmin.dll
+C:\HuyPhanApiPublish\Google.Api.Gax.dll
+C:\HuyPhanApiPublish\Google.Api.Gax.Rest.dll
+C:\HuyPhanApiPublish\Google.Apis.dll
+C:\HuyPhanApiPublish\Google.Apis.Auth.dll
+C:\HuyPhanApiPublish\Google.Apis.Core.dll
 C:\HuyPhanApiPublish\Microsoft.AspNetCore.OpenApi.dll
 C:\HuyPhanApiPublish\Microsoft.Bcl.AsyncInterfaces.dll
 C:\HuyPhanApiPublish\Microsoft.Bcl.Cryptography.dll
@@ -57,12 +64,15 @@ C:\HuyPhanApiPublish\Microsoft.IdentityModel.Protocols.OpenIdConnect.dll
 C:\HuyPhanApiPublish\Microsoft.IdentityModel.Tokens.dll
 C:\HuyPhanApiPublish\Microsoft.OpenApi.dll
 C:\HuyPhanApiPublish\Microsoft.SqlServer.Server.dll
+C:\HuyPhanApiPublish\Newtonsoft.Json.dll
 C:\HuyPhanApiPublish\Swashbuckle.AspNetCore.Swagger.dll
 C:\HuyPhanApiPublish\Swashbuckle.AspNetCore.SwaggerGen.dll
 C:\HuyPhanApiPublish\Swashbuckle.AspNetCore.SwaggerUI.dll
 C:\HuyPhanApiPublish\System.ClientModel.dll
+C:\HuyPhanApiPublish\System.CodeDom.dll
 C:\HuyPhanApiPublish\System.Configuration.ConfigurationManager.dll
 C:\HuyPhanApiPublish\System.IdentityModel.Tokens.Jwt.dll
+C:\HuyPhanApiPublish\System.Management.dll
 C:\HuyPhanApiPublish\System.Memory.Data.dll
 C:\HuyPhanApiPublish\System.Security.Cryptography.ProtectedData.dll
 C:\HuyPhanApiPublish\cs\Microsoft.Data.SqlClient.resources.dll
@@ -83,3 +93,4 @@ C:\HuyPhanApiPublish\runtimes\win\lib\net9.0\Microsoft.Data.SqlClient.dll
 C:\HuyPhanApiPublish\runtimes\win-arm64\native\Microsoft.Data.SqlClient.SNI.dll
 C:\HuyPhanApiPublish\runtimes\win-x64\native\Microsoft.Data.SqlClient.SNI.dll
 C:\HuyPhanApiPublish\runtimes\win-x86\native\Microsoft.Data.SqlClient.SNI.dll
+C:\HuyPhanApiPublish\runtimes\win\lib\net7.0\System.Management.dll
