@@ -12,7 +12,7 @@ dependencies:
   http: ^1.2.0
   flutter_easyloading: ^3.0.5
   qr_flutter: ^4.1.0
-  mobile_scanner: ^5.1.1
+  mobile_scanner: ^5.2.1
   image_picker: ^1.0.7
   pdf: ^3.10.8
   printing: ^5.12.0

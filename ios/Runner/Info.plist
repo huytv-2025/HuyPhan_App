@@ -45,5 +45,11 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+<string>Ứng dụng cần truy cập camera để quét mã QR và kiểm kê hàng hóa.</string>
+
+<!-- Tùy chọn: nếu bạn dùng image_picker để chọn ảnh từ thư viện -->
+<key>NSPhotoLibraryUsageDescription</key>
+<string>Ứng dụng cần truy cập thư viện ảnh để tải ảnh sản phẩm lên.</string>
 </dict>
 </plist>
