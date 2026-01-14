@@ -8,7 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'firebase_options.dart';
+
 
 
 
@@ -114,31 +114,60 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
-    _updateApiUrl();
+  _updateApiUrl();
+  setState(() {
+    _isLoading = true;
+    _errorMessage = '';
+  });
+
+  final clerkId = _clerkIdController.text.trim();
+  final securityCode = _securityCodeController.text;
+
+  if (clerkId.isEmpty || securityCode.isEmpty) {
     setState(() {
-      _isLoading = true;
-      _errorMessage = '';
+      _errorMessage = 'Vui lòng nhập đầy đủ ClerkID và Security Code';
+      _isLoading = false;
     });
-    final clerkId = _clerkIdController.text.trim();
-    final securityCode = _securityCodeController.text;
-    if (clerkId.isEmpty || securityCode.isEmpty) {
+    return;
+  }
+
+  try {
+    final response = await http.post(
+      Uri.parse(apiUrl),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'ClerkID': clerkId,
+        'SecurityCode': securityCode,
+      }),
+    ).timeout(const Duration(seconds: 15));
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && data['success'] == true) {
+      // Đảm bảo baseUrl đã được set (gọi lại để chắc chắn)
+      _updateApiUrl();
+
+      if (!mounted) return;  // Tránh dùng context khi widget đã dispose
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const MainMenuScreen()),
+      );
+    } else {
       setState(() {
-        _errorMessage = 'Vui lòng nhập đầy đủ ClerkID và Security Code';
-        _isLoading = false;
+        _errorMessage = data['message'] ?? 'Đăng nhập thất bại';
       });
-      return;
     }
-    try {
-      final response = await http.post(
-        Uri.parse(apiUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'ClerkID': clerkId,
-          'SecurityCode': securityCode,
-        }),
-      ).timeout(const Duration(seconds: 15));
-      final data = jsonDecode(response.body);
-      if (response.statusCode == 200 && data['success'] == true) {
+  } catch (e) {
+    setState(() {
+      _errorMessage = 'Lỗi kết nối: $e';
+    });
+  } finally {
+    if (mounted) {  // Chỉ setState nếu widget còn sống
+      setState(() => _isLoading = false);
+    }
+  }
+}
       
   @override
   Widget build(BuildContext context) {
