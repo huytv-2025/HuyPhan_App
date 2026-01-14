@@ -7,7 +7,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'dart:math' as math;
+import 'dart:async';
 
 
 
@@ -219,6 +220,54 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 30),
                       const Text('Huy Phan', style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.teal, letterSpacing: 1.2)),
                       const Text('Đăng Nhập Hệ Thống', style: TextStyle(fontSize: 20, color: Color.fromARGB(255, 173, 219, 214), fontWeight: FontWeight.w500)),
+                      // ← THÊM NÚT NÀY
+const SizedBox(height: 25),
+SizedBox(
+  width: double.infinity,
+  child: ElevatedButton.icon(
+    onPressed: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const GameScreen()),
+      );
+    },
+    icon: const Icon(Icons.sports_soccer, size: 28, color: Colors.white),
+    label: const Text(
+      '🎮 Chơi Ném Bóng Vào Ly Để Vào App!',
+      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+    ),
+    style: ElevatedButton.styleFrom(
+      backgroundColor: Colors.orangeAccent.shade700,
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+      elevation: 10,
+    ),
+  ),
+),
+// Trong build() của LoginScreen, thêm nút này (ví dụ ngay dưới nút ném bóng)
+const SizedBox(height: 16),
+SizedBox(
+  width: double.infinity,
+  child: ElevatedButton.icon(
+    onPressed: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const MazeGameScreen()),
+      );
+    },
+    icon: const Icon(Icons.route, size: 28, color: Colors.white),
+    label: const Text(
+      '🎮 Chơi Mê Cung Để Vào App!',
+      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+    ),
+    style: ElevatedButton.styleFrom(
+      backgroundColor: Colors.purpleAccent.shade700,
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+      elevation: 10,
+    ),
+  ),
+),
                       const SizedBox(height: 40),
                       TextField(
                         controller: _ipController,
@@ -2851,4 +2900,619 @@ Future<void> _showVphisInputDialog(int index, String code) async {
     _clearControllers();
     super.dispose();
   }
+}
+// Thêm class GameScreen này vào cuối file (trước dấu } cuối cùng của file)
+class GameScreen extends StatefulWidget {
+  const GameScreen({super.key});
+
+  @override
+  State<GameScreen> createState() => _GameScreenState();
+}
+
+class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
+  static const double ballRadius = 22.0;
+  static const double cupWidth = 90.0;
+  static const double cupHeight = 110.0;
+  static const int totalLevels = 20;
+
+  int currentLevel = 1;
+  int score = 0;
+  int requiredHits = 1; // Bắt đầu chỉ cần 1 hit
+  bool gameWon = false;
+  bool ballThrown = false;
+
+  Offset ballPos = const Offset(120, 600);
+  Offset ballVel = Offset.zero;
+  double gravity = 0.45;
+  double drag = 0.98;
+
+  late AnimationController _animController;
+  double cupX = 0;
+  double cupSpeed = 0.8; // Bắt đầu rất chậm
+  double cupDir = 1.0;
+  List<Rect> obstacles = [];
+  final rng = math.Random();
+
+  late double screenWidth;
+  late double screenHeight;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 16),
+    );
+    _animController.addListener(_physicsTick);
+    _animController.repeat();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final size = MediaQuery.of(context).size;
+    screenWidth = size.width;
+    screenHeight = size.height;
+    _resetLevel();
+  }
+
+  void _resetLevel() {
+    if (!mounted) return;
+    setState(() {
+      ballPos = Offset(100 + rng.nextDouble() * 80, screenHeight - 200);
+      ballVel = Offset.zero;
+      ballThrown = false;
+
+      // Tốc độ ly tăng dần theo level (từ 0.8 → 8.0)
+      cupSpeed = 0.8 + (currentLevel - 1) * 0.38; // Level 1: 0.8, Level 20: ~8.0
+      cupX = 80 + rng.nextDouble() * (screenWidth - 200);
+      cupDir = rng.nextBool() ? 1.0 : -1.0;
+
+      // Số lần trúng cần thiết tăng dần
+      requiredHits = 1 + (currentLevel ~/ 4); // Level 1-3:1, 4-7:2, 8-11:3, ..., 16-20:5-6
+
+      obstacles.clear();
+
+      // Số chướng ngại tăng dần theo level
+      int numObs = ((currentLevel - 3) / 2).clamp(0, 10).toInt(); // Level 1-3:0, 4-5:1, ..., 18-20:7-8
+      for (int i = 0; i < numObs; i++) {
+        double obsX = 60 + rng.nextDouble() * (screenWidth - 200);
+        double obsY = 150 + rng.nextDouble() * 350;
+        obstacles.add(Rect.fromLTWH(obsX, obsY, 50 + rng.nextDouble() * 40, 25));
+      }
+    });
+  }
+
+  void _physicsTick() {
+    if (!mounted || gameWon || !ballThrown) return;
+
+    setState(() {
+      ballVel = Offset(ballVel.dx * drag, ballVel.dy * drag + gravity);
+      ballPos += ballVel;
+
+      cupX += cupDir * cupSpeed;
+      if (cupX <= 20 || cupX >= screenWidth - cupWidth - 20) {
+        cupDir *= -1;
+      }
+
+      final ballRect = Rect.fromCircle(center: ballPos, radius: ballRadius);
+      for (Rect obs in obstacles) {
+        if (ballRect.overlaps(obs)) {
+          ballVel = Offset(
+            ballVel.dx * -0.6 + (rng.nextDouble() - 0.5) * 2,
+            ballVel.dy * -0.5,
+          );
+          break;
+        }
+      }
+
+      final cupRect = Rect.fromLTWH(cupX, 120, cupWidth, cupHeight);
+      if (ballRect.overlaps(cupRect) && ballVel.dy > 0) {
+        score++;
+        _showHitEffect();
+        if (score >= requiredHits) {
+          if (currentLevel < totalLevels) {
+            currentLevel++;
+            score = 0;
+            _resetLevel();
+          } else {
+            gameWon = true;
+            _animController.stop();
+            if (mounted) {
+              Timer(const Duration(seconds: 2), () {
+                if (mounted) Navigator.pop(context);
+              });
+            }
+          }
+        } else {
+          _resetLevel();
+        }
+      }
+
+      if (ballPos.dy > screenHeight + 50) {
+        _resetLevel();
+      }
+    });
+  }
+
+  void _showHitEffect() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Trúng! $score/$requiredHits'),
+        backgroundColor: Colors.green,
+        duration: const Duration(milliseconds: 600),
+      ),
+    );
+  }
+
+  void _throwBall(DragEndDetails details) {
+    if (!mounted) return;
+    setState(() {
+      ballVel = Offset(
+        details.velocity.pixelsPerSecond.dx / 25,
+        details.velocity.pixelsPerSecond.dy / 25 - 12,
+      );
+      ballThrown = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.indigo[900],
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF1E3C72), Color(0xFF2A5298)],
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              height: 60,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [Colors.green.shade600, Colors.green.shade400]),
+              ),
+            ),
+          ),
+          ...obstacles.map((obs) => Positioned(
+                left: obs.left,
+                top: obs.top,
+                child: Container(
+                  width: obs.width,
+                  height: obs.height,
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade600,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8)],
+                  ),
+                ),
+              )),
+          Positioned(
+            left: cupX,
+            top: 110,
+            child: Container(
+              width: cupWidth,
+              height: cupHeight,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Colors.redAccent, Colors.orangeAccent]),
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(45)),
+                border: Border.all(color: Colors.white, width: 5),
+                boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 15, offset: const Offset(0, 8))],
+              ),
+              child: const Icon(Icons.local_bar, size: 50, color: Colors.white),
+            ),
+          ),
+          Positioned(
+            left: ballPos.dx - ballRadius,
+            top: ballPos.dy - ballRadius,
+            child: GestureDetector(
+              onPanEnd: _throwBall,
+              child: Container(
+                width: ballRadius * 2,
+                height: ballRadius * 2,
+                decoration: const BoxDecoration(
+                  gradient: RadialGradient(colors: [Colors.white, Colors.blueAccent]),
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 12, spreadRadius: 2)],
+                ),
+                child: const Icon(Icons.sports_soccer, color: Colors.white70, size: 30),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.white, size: 30),
+                        onPressed: () {
+                          _animController.stop();
+                          Navigator.pop(context);
+                        },
+                      ),
+                      Column(
+                        children: [
+                          Text(
+                            'Level $currentLevel / $totalLevels',
+                            style: const TextStyle(fontSize: 24, color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            'Trúng: $score / $requiredHits',
+                            style: const TextStyle(fontSize: 20, color: Colors.yellowAccent, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 50),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                Padding(
+                  padding: const EdgeInsets.all(30),
+                  child: Column(
+                    children: [
+                      Text(
+                        gameWon
+                            ? '🎉 CHÚC MỪNG! Bạn đã hoàn thành 20 level!\nĐang quay về đăng nhập...'
+                            : 'Vuốt mạnh lên để ném bóng vào ly!',
+                        style: TextStyle(
+                          fontSize: 22,
+                          color: gameWon ? Colors.greenAccent : Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      if (!gameWon) ...[
+                        const SizedBox(height: 20),
+                        Text(
+                          'Level càng cao ly càng nhanh và có nhiều chướng ngại hơn!\nLevel 1 rất dễ để bạn làm quen nhé!',
+                          style: TextStyle(fontSize: 16, color: Colors.white70),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animController.stop();
+    _animController.dispose();
+    super.dispose();
+  }
+}
+class MazeGameScreen extends StatefulWidget {
+  const MazeGameScreen({super.key});
+
+  @override
+  State<MazeGameScreen> createState() => _MazeGameScreenState();
+}
+
+class _MazeGameScreenState extends State<MazeGameScreen> {
+  static const int totalLevels = 20;
+  int currentLevel = 1;
+  bool gameWon = false;
+
+  // Vị trí bóng (người chơi)
+  Offset playerPos = const Offset(60, 60);
+  double playerSize = 40.0;
+
+  // Kích thước mê cung
+  late int mazeWidth;
+  late int mazeHeight;
+  late List<List<int>> maze; // 0: đường đi, 1: tường
+
+  // Vị trí đích
+  Offset goalPos = const Offset(0, 0);
+
+  // Tường di động (từ level 11+)
+  List<MovingWall> movingWalls = [];
+
+  late double screenWidth;
+  late double screenHeight;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final size = MediaQuery.of(context).size;
+    screenWidth = size.width;
+    screenHeight = size.height;
+    _generateMaze();
+  }
+
+  void _generateMaze() {
+    if (!mounted) return;
+
+    mazeWidth = 8 + (currentLevel ~/ 3);
+    mazeHeight = 8 + (currentLevel ~/ 3);
+
+    maze = List.generate(mazeHeight, (_) => List.filled(mazeWidth, 1));
+
+    void carve(int x, int y) {
+      maze[y][x] = 0;
+      final directions = [
+        [0, -2], [0, 2], [-2, 0], [2, 0]
+      ]..shuffle();
+      for (var dir in directions) {
+        int nx = x + dir[0];
+        int ny = y + dir[1];
+        if (nx >= 0 && nx < mazeWidth && ny >= 0 && ny < mazeHeight && maze[ny][nx] == 1) {
+          maze[y + dir[1] ~/ 2][x + dir[0] ~/ 2] = 0;
+          carve(nx, ny);
+        }
+      }
+    }
+
+    carve(1, 1);
+
+    maze[mazeHeight - 2][mazeWidth - 2] = 0;
+    goalPos = Offset(
+      (mazeWidth - 2) * (screenWidth / mazeWidth) + 30,
+      (mazeHeight - 2) * (screenHeight * 0.6 / mazeHeight) + 30,
+    );
+
+    playerPos = const Offset(60, 60);
+
+    movingWalls.clear();
+    if (currentLevel >= 11) {
+      int numMoving = (currentLevel - 10).clamp(1, 5);
+      for (int i = 0; i < numMoving; i++) {
+        double wx = 100 + rng.nextDouble() * (screenWidth - 200);
+        double wy = 200 + rng.nextDouble() * (screenHeight * 0.5 - 300);
+        movingWalls.add(MovingWall(
+          pos: Offset(wx, wy),
+          dir: rng.nextBool() ? 1 : -1,
+          speed: 1.0 + (currentLevel - 10) * 0.3,
+        ));
+      }
+    }
+
+    setState(() {});
+  }
+
+  final rng = math.Random();
+
+  void _movePlayer(Offset delta) {
+    if (!mounted || gameWon) return;
+
+    Offset newPos = playerPos + delta;
+
+    bool collision = false;
+    final playerRect = Rect.fromCircle(center: newPos, radius: playerSize / 2);
+
+    // Kiểm tra tường tĩnh
+    for (int y = 0; y < mazeHeight; y++) {
+      for (int x = 0; x < mazeWidth; x++) {
+        if (maze[y][x] == 1) {
+          final wallRect = Rect.fromLTWH(
+            x * (screenWidth / mazeWidth),
+            y * (screenHeight * 0.6 / mazeHeight),
+            screenWidth / mazeWidth,
+            screenHeight * 0.6 / mazeHeight,
+          );
+          if (playerRect.overlaps(wallRect)) {
+            collision = true;
+            break;
+          }
+        }
+      }
+      if (collision) break;
+    }
+
+    // Kiểm tra tường di động
+    for (var wall in movingWalls) {
+      final wallRect = Rect.fromCircle(center: wall.pos, radius: 25);
+      if (playerRect.overlaps(wallRect)) {
+        collision = true;
+        break;
+      }
+    }
+
+    if (!collision) {
+      setState(() {
+        playerPos = Offset(
+          newPos.dx.clamp(40.0, screenWidth - 40.0),
+          newPos.dy.clamp(40.0, screenHeight * 0.6 - 40.0),
+        );
+      });
+    }
+
+    // Kiểm tra đến đích
+    final goalRect = Rect.fromCircle(center: goalPos, radius: 30);
+    if (playerRect.overlaps(goalRect)) {
+      if (currentLevel < totalLevels) {
+        currentLevel++;
+        _generateMaze();
+      } else {
+        setState(() => gameWon = true);
+        Timer(const Duration(seconds: 2), () {
+          if (mounted) Navigator.pop(context);
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.blueGrey[900],
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF0D1B2A), Color(0xFF1B263B)],
+              ),
+            ),
+          ),
+
+          CustomPaint(
+            size: Size(screenWidth, screenHeight * 0.6),
+            painter: MazePainter(maze, screenWidth / mazeWidth, screenHeight * 0.6 / mazeHeight),
+          ),
+
+          ...movingWalls.map((wall) => AnimatedPositioned(
+                duration: const Duration(milliseconds: 16),
+                left: wall.pos.dx - 25,
+                top: wall.pos.dy - 25,
+                child: Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withValues(alpha: 0.7), // ← Sửa deprecated
+                    shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.5), blurRadius: 10)],
+                  ),
+                ),
+              )),
+
+          Positioned(
+            left: playerPos.dx - playerSize / 2,
+            top: playerPos.dy - playerSize / 2,
+            child: GestureDetector(
+              onPanUpdate: (details) {
+                _movePlayer(details.delta);
+              },
+              child: Container(
+                width: playerSize,
+                height: playerSize,
+                decoration: const BoxDecoration(
+                  gradient: RadialGradient(colors: [Colors.cyanAccent, Colors.blue]),
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: Colors.cyanAccent, blurRadius: 12, spreadRadius: 4)],
+                ),
+                child: const Icon(Icons.sports_handball, color: Colors.white, size: 30),
+              ),
+            ),
+          ),
+
+          Positioned(
+            left: goalPos.dx - 30,
+            top: goalPos.dy - 30,
+            child: Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: Colors.yellowAccent,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.orange, width: 4),
+                boxShadow: [BoxShadow(color: Colors.yellow.withValues(alpha: 0.6), blurRadius: 15)],
+              ),
+              child: const Icon(Icons.flag, color: Colors.red, size: 40),
+            ),
+          ),
+
+          SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.white, size: 32),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                      Text(
+                        'Mê Cung - Level $currentLevel / $totalLevels',
+                        style: const TextStyle(
+                          fontSize: 22,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 50),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                Padding(
+                  padding: const EdgeInsets.all(30),
+                  child: Column(
+                    children: [
+                      if (gameWon)
+                        const Text(
+                          '🎉 CHÚC MỪNG! Bạn đã vượt qua 20 level mê cung!\nĐang quay về đăng nhập...',
+                          style: TextStyle(
+                            fontSize: 24,
+                            color: Colors.greenAccent,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        )
+                      else
+                        const Text(
+                          'Vuốt để di chuyển bóng đến cờ đích!\nLevel càng cao mê cung càng khó...',
+                          style: TextStyle(fontSize: 18, color: Colors.white70),
+                          textAlign: TextAlign.center,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Painter vẽ mê cung (giữ nguyên)
+class MazePainter extends CustomPainter {
+  final List<List<int>> maze;
+  final double cellWidth;
+  final double cellHeight;
+
+  MazePainter(this.maze, this.cellWidth, this.cellHeight);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.grey[850]!;
+    for (int y = 0; y < maze.length; y++) {
+      for (int x = 0; x < maze[y].length; x++) {
+        if (maze[y][x] == 1) {
+          canvas.drawRect(
+            Rect.fromLTWH(x * cellWidth, y * cellHeight, cellWidth, cellHeight),
+            paint,
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+// Class tường di động (giữ nguyên)
+class MovingWall {
+  Offset pos;
+  double dir;
+  double speed;
+
+  MovingWall({required this.pos, required this.dir, required this.speed});
 }
