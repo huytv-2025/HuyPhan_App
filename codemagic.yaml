@@ -1,0 +1,39 @@
+workflows:
+  flutter-ios:  # Tên workflow tùy ý, có thể đổi thành ios-build hoặc default
+    name: Flutter iOS Build
+    instance_type: mac_mini_m2  # Như bạn đang dùng
+    max_build_duration: 120  # Phút, tăng nếu build lâu
+    environment:
+      flutter: stable  # Hoặc version cụ thể như 3.24.x nếu cần
+      xcode: latest
+      cocoapods: default  # Dùng CocoaPods mới nhất
+    scripts:
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+      - name: Clean and install pods  # Script custom để clean + install
+        script: |
+          cd $CM_FLUTTER_PROJECT/ios
+          rm -rf Pods Podfile.lock  # Clean cũ để tránh cache lỗi
+          pod repo update
+          pod install --repo-update
+      - name: Override iOS deployment target (nếu cần fix lỗi higher minimum)
+        script: |
+          cd $CM_FLUTTER_PROJECT/ios
+          # Override trong project.pbxproj (nếu Podfile không có post_install)
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g' Runner.xcodeproj/project.pbxproj
+          # Hoặc nếu Podfile đã có, bạn có thể thêm post_install qua script (nâng cao)
+      - name: Build iOS
+        script: |
+          flutter build ios --release --no-codesign  # Hoặc flutter build ipa nếu publish
+    artifacts:
+      - build/ios/ipa/*.ipa  # Nếu build ipa
+      - build/ios/iphoneos/*.app  # Nếu build app
+    publishing:
+      # Thêm nếu cần publish (email, App Store Connect, v.v.)
+      email:
+        recipients:
+          - your-email@example.com
+        notify:
+          success: true
+          failure: true
