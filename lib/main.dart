@@ -7,8 +7,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:firebase_core/firebase_core.dart';
+
 import 'firebase_options.dart';
 
 
@@ -24,9 +23,7 @@ class AppConfig {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // Bắt buộc cho async trong main
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  
 
   runApp(const MyApp());
 }
@@ -142,52 +139,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ).timeout(const Duration(seconds: 15));
       final data = jsonDecode(response.body);
       if (response.statusCode == 200 && data['success'] == true) {
-        // ── THÊM ĐOẠN CODE NÀY VÀO ĐÂY ────────────────────────────────
-      String? fcmToken = await FirebaseMessaging.instance.getToken();
-      if (fcmToken != null && clerkId.isNotEmpty) {
-        try {
-          final tokenResponse = await http.post(
-           Uri.parse('${AppConfig.baseUrl}/api/user/save-fcm-token'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'ClerkID': clerkId,
-              'FcmToken': fcmToken,
-              'DeviceType': 'mobile',  // hoặc thêm logic Platform.isAndroid ? 'android' : 'ios'
-            }),
-          );
-          
-          if (tokenResponse.statusCode == 200) {
-            print('FCM token saved to server successfully');
-          } else {
-            print('Lỗi lưu FCM token: ${tokenResponse.statusCode} - ${tokenResponse.body}');
-          }
-        } catch (e) {
-          print('Lỗi khi gửi FCM token lên server: $e');
-        }
-      }
-
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const MainMenuScreen()),
-          );
-        }
-      } else {
-        setState(() {
-          _errorMessage = data['message'] ?? 'Đăng nhập thất bại (mã: ${response.statusCode})';
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Không kết nối được server.\nLỗi: $e';
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
+      
   @override
   Widget build(BuildContext context) {
     return Scaffold(

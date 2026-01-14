@@ -20,8 +20,7 @@ dependencies:
   permission_handler: ^11.3.1
   shared_preferences: ^2.3.0
   badges: ^3.1.2
-  firebase_core: ^4.3.0
-  firebase_messaging: ^16.1.0
+
 
 dev_dependencies:
   flutter_test:
