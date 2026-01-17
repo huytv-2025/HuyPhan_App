@@ -31,7 +31,7 @@ public class LoginController : ControllerBase
             command.Parameters.AddWithValue("@ClerkID", request.ClerkID.Trim());
             command.Parameters.AddWithValue("@SecurityCode", request.SecurityCode); // Đúng tên
 
-            var count = (int)await command.ExecuteScalarAsync();
+            var count = Convert.ToInt32(await command.ExecuteScalarAsync());
 
             if (count > 0)
             {

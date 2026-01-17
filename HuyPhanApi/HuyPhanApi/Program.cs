@@ -15,7 +15,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<FcmService>();
 
-// Bật CORS để Flutter và Swagger gọi được API
+
+// Bật CORS để Flutter và Swagger gọi được API  
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>

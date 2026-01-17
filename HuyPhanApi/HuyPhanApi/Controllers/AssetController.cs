@@ -1,242 +1,365 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using HuyPhanApi.Services;
+using HuyPhanApi.Models;
+using System.Data.Common;  // Để dùng DbTransaction
+using HuyPhanApi.Extensions;
 
-namespace HuyPhanApi.Controllers;
-
-[ApiController]
-[Route("api/asset")]
-public class AssetUploadController : ControllerBase
+namespace HuyPhanApi.Controllers
 {
-    private readonly IWebHostEnvironment _env;
-    private readonly string _connectionString =
-        "Server=.;Database=SMILE_BO;User Id=Smile;Password=AnhMinh167TruongDinh;TrustServerCertificate=True;";
-
-    public AssetUploadController(IWebHostEnvironment env)
+    [ApiController]
+    [Route("api/asset-physical")]
+    public class AssetPhysicalController : ControllerBase
     {
-        _env = env;
-    }
+        private readonly string _connectionString;
+        private readonly FcmService? _fcmService;
 
-    // GET: api/asset
-    [HttpGet]
-    public async Task<IActionResult> Get()
-    {
-        try
+        public AssetPhysicalController(IConfiguration configuration, FcmService? fcmService = null)
         {
-            await using var connection = new SqlConnection(_connectionString);
-            await connection.OpenAsync();
-
-            const string sql = @"
-                SELECT 
-                    a.AssetClassCode,
-                    LTRIM(RTRIM(a.AssetClassName)) AS AssetClassName,
-                    LTRIM(RTRIM(a.DepartmentCode)) AS DepartmentCode,
-                    LTRIM(RTRIM(a.LocationCode)) AS LocationCode,
-                    ISNULL(a.SlvgQty, 0) AS SlvgQty,
-                    LTRIM(RTRIM(a.PhisLoc)) AS PhisLoc,
-                    LTRIM(RTRIM(a.PhisUser)) AS PhisUser,
-                    q.QRCode,
-                    q.ImagePath
-                FROM AssetItem a
-                LEFT JOIN QRAsset q ON LTRIM(RTRIM(a.AssetClassCode)) = LTRIM(RTRIM(q.AssetClassCode))
-                ORDER BY a.AssetClassCode";
-
-            await using var command = new SqlCommand(sql, connection);
-            await using var reader = await command.ExecuteReaderAsync();
-
-            var list = new List<object>();
-
-            while (await reader.ReadAsync())
-            {
-                string code = reader["AssetClassCode"]?.ToString()?.Trim() ?? "";
-                string qrCodeFromDb = reader["QRCode"]?.ToString()?.Trim();
-
-                list.Add(new
-                {
-                    assetClassCode = code,
-                    assetClassName = reader["AssetClassName"]?.ToString()?.Trim() ?? "Không tên",
-                    departmentCode = reader["DepartmentCode"]?.ToString()?.Trim() ?? "",
-                    locationCode = reader["LocationCode"]?.ToString()?.Trim() ?? "",
-                    slvgQty = reader["SlvgQty"]?.ToString() ?? "0",
-                    phisLoc = reader["PhisLoc"]?.ToString()?.Trim() ?? "",
-                    phisUser = reader["PhisUser"]?.ToString()?.Trim() ?? "",
-                    qrCode = !string.IsNullOrEmpty(qrCodeFromDb) ? qrCodeFromDb : $"HPAPP:{code}",
-                    imagePath = reader["ImagePath"]?.ToString()?.Trim() ?? ""
-                });
-            }
-
-            return Ok(list);
+            _connectionString = configuration.GetConnectionString("Default")
+                ?? "Server=.;Database=SMILE_BO;User Id=Smile;Password=AnhMinh167TruongDinh;TrustServerCertificate=True;";
+            _fcmService = fcmService;
         }
-        catch (Exception ex)
+
+        // GET: api/asset-physical/get
+        [HttpGet("get")]
+        public async Task<IActionResult> GetAssetPhysical(
+            [FromQuery] string? assetClassName = null,
+            [FromQuery] string? locationCode = null)
         {
-            Console.WriteLine("Lỗi Asset API: " + ex.Message);
-            return StatusCode(500, new { success = false, message = "Lỗi server: " + ex.Message });
-        }
-    }
-
-    // POST: api/asset/generate-batch
-    [HttpPost("generate-batch")]
-    public async Task<IActionResult> GenerateBatch([FromBody] GenerateQrRequest request)
-    {
-        if (request?.Codes == null || request.Codes.Count == 0)
-            return BadRequest(new { success = false, message = "Danh sách mã tài sản trống" });
-
-        try
-        {
-            await using var connection = new SqlConnection(_connectionString);
-            await connection.OpenAsync();
-
-            int count = 0;
-            foreach (var code in request.Codes)
+            try
             {
-                string trimmedCode = code.Trim();
-                string qrData = $"HPAPP:{trimmedCode}";
+                await using var connection = new SqlConnection(_connectionString);
+                await connection.OpenAsync();
 
                 var sql = @"
-                    IF EXISTS (SELECT 1 FROM QRAsset WHERE AssetClassCode = @Code)
-                        UPDATE QRAsset 
-                        SET QRCode = @QRCode, CreatedDate = GETDATE(), CreatedBy = @CreatedBy, IsActive = 1
-                        WHERE AssetClassCode = @Code
-                    ELSE
-                        INSERT INTO QRAsset (AssetClassCode, QRCode, CreatedDate, CreatedBy, IsActive, ImagePath)
-                        VALUES (@Code, @QRCode, GETDATE(), @CreatedBy, 1, NULL)";
+                    SET NOCOUNT ON;
+                    SELECT 
+                        a.AssetClassCode,
+                        LTRIM(RTRIM(a.AssetClassName)) AS AssetClassName,
+                        LTRIM(RTRIM(a.DepartmentCode)) AS DepartmentCode,
+                        LTRIM(RTRIM(a.LocationCode)) AS LocationCode,
+                        ISNULL(a.SlvgQty, 0) AS SlvgQty,
+                        LTRIM(RTRIM(a.PhisLoc)) AS PhisLoc,
+                        LTRIM(RTRIM(a.PhisUser)) AS PhisUser
+                    FROM AssetItem a
+                    WHERE 1 = 1";
 
-                await using var cmd = new SqlCommand(sql, connection);
-                cmd.Parameters.AddWithValue("@Code", trimmedCode);
-                cmd.Parameters.AddWithValue("@QRCode", qrData);
-                cmd.Parameters.AddWithValue("@CreatedBy", request.CreatedBy ?? "MobileApp");
+                if (!string.IsNullOrWhiteSpace(assetClassName))
+                    sql += " AND a.AssetClassName LIKE @AssetClassName";
 
-                int rows = await cmd.ExecuteNonQueryAsync();
-                if (rows > 0) count++;
+                if (!string.IsNullOrWhiteSpace(locationCode))
+                    sql += " AND a.LocationCode = @LocationCode";
+
+                sql += " ORDER BY a.AssetClassName, a.AssetClassCode";
+
+                await using var command = new SqlCommand(sql, connection);
+
+                if (!string.IsNullOrWhiteSpace(assetClassName))
+                    command.Parameters.AddWithValue("@AssetClassName", "%" + assetClassName.Trim() + "%");
+
+                if (!string.IsNullOrWhiteSpace(locationCode))
+                    command.Parameters.AddWithValue("@LocationCode", locationCode.Trim());
+
+                await using var reader = await command.ExecuteReaderAsync();
+
+                var results = new List<Dictionary<string, object>>();
+
+                while (await reader.ReadAsync())
+                {
+                    results.Add(new Dictionary<string, object>
+                    {
+                        ["AssetClassCode"]  = reader.GetSafeString("AssetClassCode"),
+                        ["AssetClassName"]  = reader.GetSafeString("AssetClassName") ?? "Không tên",
+                        ["DepartmentCode"] = reader.GetSafeString("DepartmentCode"),
+                        ["LocationCode"]   = reader.GetSafeString("LocationCode"),
+                        ["SlvgQty"]        = reader.GetSafeDecimal("SlvgQty"),
+                        ["PhisLoc"]        = reader.GetSafeString("PhisLoc"),
+                        ["PhisUser"]       = reader.GetSafeString("PhisUser")
+                    });
+                }
+
+                Console.WriteLine($"GetAssetPhysical trả về {results.Count} dòng"); // Log debug
+
+                return Ok(results);
             }
-
-            return Ok(new { success = true, count = count, message = $"Đã tạo QR cho {count} tài sản thành công!" });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { success = false, message = ex.Message });
-        }
-    }
-
-    // POST: api/asset/upload-image
-    [HttpPost("upload-image")]
-    public async Task<IActionResult> UploadImage([FromForm] IFormFile file, [FromForm] string assetClassCode)
-    {
-        if (file == null || file.Length == 0)
-            return BadRequest(new { success = false, message = "Chưa chọn file ảnh" });
-
-        if (string.IsNullOrWhiteSpace(assetClassCode))
-            return BadRequest(new { success = false, message = "Thiếu mã tài sản (AssetClassCode)" });
-
-        var allowedExtensions = new[] { ".jpg", ".jpeg", ".png" };
-        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-
-        if (!allowedExtensions.Contains(extension))
-            return BadRequest(new { success = false, message = "Chỉ chấp nhận file .jpg, .jpeg, .png" });
-
-        if (file.Length > 5 * 1024 * 1024)
-            return BadRequest(new { success = false, message = "File quá lớn (tối đa 5MB)" });
-
-        if (!file.ContentType.StartsWith("image/"))
-            return BadRequest(new { success = false, message = "File không phải định dạng ảnh" });
-
-        try
-        {
-            // Dùng đường dẫn tuyệt đối giống Inventory để tránh lỗi _env.WebRootPath
-            var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "assets");
-            Console.WriteLine($"Thư mục lưu ảnh Asset: {uploadsFolder}");
-
-            Directory.CreateDirectory(uploadsFolder);
-
-            var safeCode = assetClassCode.Trim().Replace("/", "-").Replace("\\", "-");
-            var uniqueFileName = $"{safeCode}_{DateTime.Now:yyyyMMddHHmmssfff}{extension}";
-            var filePath = Path.Combine(uploadsFolder, uniqueFileName);
-
-            // Lưu file ảnh
-            await using (var stream = new FileStream(filePath, FileMode.Create))
+            catch (Exception ex)
             {
-                await file.CopyToAsync(stream);
+                Console.WriteLine($"Lỗi GetAssetPhysical: {ex.Message}\n{ex.StackTrace}");
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
-            Console.WriteLine($"Đã lưu ảnh: {filePath}");
+        }
 
-            var imageUrl = $"/images/assets/{uniqueFileName}";
-
-            string? oldImagePath = null;
+        // POST: api/asset-physical/save
+        [HttpPost("save")]
+        public async Task<IActionResult> SaveAssetPhysical([FromBody] SaveAssetPhysicalRequest request)
+        {
+            if (request?.Items == null || request.Items.Count == 0)
+                return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ hoặc trống" });
 
             await using var connection = new SqlConnection(_connectionString);
             await connection.OpenAsync();
-            await using var transaction = connection.BeginTransaction();
 
-            // Sửa: Lấy ảnh cũ với xử lý DBNull đúng scope
-            const string getOldImageSql = "SELECT ImagePath FROM QRAsset WHERE AssetClassCode = @AssetClassCode";
-            await using (var cmdGet = new SqlCommand(getOldImageSql, connection, transaction))
+            DbTransaction dbTransaction = await connection.BeginTransactionAsync();
+            SqlTransaction? transaction = dbTransaction as SqlTransaction;
+
+            try
             {
-                cmdGet.Parameters.AddWithValue("@AssetClassCode", assetClassCode.Trim());
+                int affectedRows = 0;
 
-                var result = await cmdGet.ExecuteScalarAsync();  // Biến result được khai báo ở đây
+                const string sql = @"
+                    IF EXISTS (
+                        SELECT 1 FROM QRAssetPhisical 
+                        WHERE AssetClassCode = @AssetClassCode 
+                          AND Vperiod = @Vperiod 
+                          AND ISNULL(LocationCode, '') = ISNULL(@LocationCode, '')
+                    )
+                    BEGIN
+                        UPDATE QRAssetPhisical
+                        SET 
+                            Vend = @Vend,
+                            Vphis = @Vphis,
+                            DepartmentCode = @DepartmentCode,
+                            CreatedDate = GETDATE(),
+                            CreatedBy = @CreatedBy,
+                            IsActive = 1
+                        WHERE 
+                            AssetClassCode = @AssetClassCode 
+                            AND Vperiod = @Vperiod 
+                            AND ISNULL(LocationCode, '') = ISNULL(@LocationCode, '')
+                    END
+                    ELSE
+                    BEGIN
+                        INSERT INTO QRAssetPhisical (
+                            AssetClassCode, Vend, Vphis, LocationCode, DepartmentCode, 
+                            Vperiod, CreatedDate, CreatedBy, IsActive
+                        )
+                        VALUES (
+                            @AssetClassCode, @Vend, @Vphis, @LocationCode, @DepartmentCode,
+                            @Vperiod, GETDATE(), @CreatedBy, 1
+                        );
+                    END";
 
-                // Xử lý DBNull an toàn
-                if (result != DBNull.Value && result != null)
+                foreach (var item in request.Items)
                 {
-                    oldImagePath = result.ToString();
+                    if (string.IsNullOrWhiteSpace(item.AssetClassCode) || string.IsNullOrWhiteSpace(item.Vperiod))
+                        continue;
+
+                    await using var cmd = new SqlCommand(sql, connection, transaction);
+
+                    cmd.Parameters.AddWithValue("@AssetClassCode", item.AssetClassCode.Trim());
+                    cmd.Parameters.AddWithValue("@Vend", item.Vend);
+                    cmd.Parameters.AddWithValue("@Vphis", item.Vphis);
+                    cmd.Parameters.AddWithValue("@LocationCode", item.LocationCode?.Trim() ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@DepartmentCode", item.DepartmentCode?.Trim() ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@Vperiod", item.Vperiod.Trim());
+                    cmd.Parameters.AddWithValue("@CreatedBy", item.CreatedBy ?? "MobileApp");
+
+                    affectedRows += await cmd.ExecuteNonQueryAsync();
                 }
+
+                transaction?.Commit();
+
+                if (_fcmService != null)
+                {
+                    int badgeCount = await CalculateBadgeCount();
+                    if (badgeCount > 0)
+                        await _fcmService.SendSilentBadgeUpdate(badgeCount);
+                }
+
+                return Ok(new 
+                { 
+                    success = true, 
+                    message = $"Đã lưu/cập nhật {affectedRows} dòng kiểm kê tài sản",
+                    count = affectedRows 
+                });
             }
-
-            // Cập nhật hoặc insert
-            const string sql = @"
-                IF EXISTS (SELECT 1 FROM QRAsset WHERE AssetClassCode = @AssetClassCode)
-                    UPDATE QRAsset
-                    SET ImagePath = @ImagePath,
-                        CreatedDate = GETDATE(),
-                        CreatedBy = @CreatedBy,
-                        IsActive = 1
-                    WHERE AssetClassCode = @AssetClassCode
-                ELSE
-                    INSERT INTO QRAsset
-                    (AssetClassCode, QRCode, ImagePath, CreatedDate, CreatedBy, IsActive)
-                    VALUES
-                    (@AssetClassCode, 'HPAPP:' + @AssetClassCode, @ImagePath, GETDATE(), @CreatedBy, 1)";
-
-            await using var cmd = new SqlCommand(sql, connection, transaction);
-            cmd.Parameters.AddWithValue("@AssetClassCode", assetClassCode.Trim());
-            cmd.Parameters.AddWithValue("@ImagePath", imageUrl);
-            cmd.Parameters.AddWithValue("@CreatedBy", "MobileApp");
-
-            await cmd.ExecuteNonQueryAsync();
-
-            await transaction.CommitAsync();
-
-            // Xóa file ảnh cũ nếu tồn tại
-            if (!string.IsNullOrEmpty(oldImagePath))
+            catch (Exception ex)
             {
-                var oldPhysicalPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", oldImagePath.TrimStart('/'));
-                if (System.IO.File.Exists(oldPhysicalPath))
-                {
-                    try { System.IO.File.Delete(oldPhysicalPath); } catch { }
-                }
+                transaction?.Rollback();
+                Console.WriteLine($"Lỗi SaveAssetPhysical: {ex.Message}\n{ex.StackTrace}");
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
             }
-
-            return Ok(new { success = true, message = "Đã tải ảnh lên thành công!", imageUrl });
+            finally
+            {
+                transaction?.Dispose();
+            }
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine("=== LỖI UPLOAD ASSET ===");
-            Console.WriteLine($"AssetClassCode: {assetClassCode}");
-            Console.WriteLine($"Message: {ex.Message}");
-            Console.WriteLine($"StackTrace: {ex.StackTrace}");
 
-            return StatusCode(500, new
+        // POST: api/asset-physical/search
+        [HttpPost("search")]
+        public async Task<IActionResult> SearchAsset([FromBody] SearchAssetRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request?.AssetCode))
+                return BadRequest(new { success = false, message = "Thiếu mã tài sản" });
+
+            try
             {
-                success = false,
-                message = "Lỗi server khi upload ảnh",
-                errorDetail = ex.Message
-            });
+                await using var connection = new SqlConnection(_connectionString);
+                await connection.OpenAsync();
+
+                const string sql = @"
+                    SELECT 
+                        a.AssetClassCode,
+                        LTRIM(RTRIM(a.AssetClassName)) AS AssetClassName,
+                        LTRIM(RTRIM(a.DepartmentCode)) AS DepartmentCode,
+                        LTRIM(RTRIM(a.LocationCode)) AS LocationCode,
+                        ISNULL(a.SlvgQty, 0) AS SlvgQty,
+                        LTRIM(RTRIM(a.PhisLoc)) AS PhisLoc,
+                        LTRIM(RTRIM(a.PhisUser)) AS PhisUser,
+                        q.ImagePath
+                    FROM AssetItem a
+                    LEFT JOIN QRAsset q ON a.AssetClassCode = q.AssetClassCode
+                    WHERE a.AssetClassCode = @AssetClassCode";
+
+                await using var cmd = new SqlCommand(sql, connection);
+                cmd.Parameters.AddWithValue("@AssetClassCode", request.AssetCode.Trim());
+
+                await using var reader = await cmd.ExecuteReaderAsync();
+
+                var results = new List<object>();
+
+                while (await reader.ReadAsync())
+                {
+                    results.Add(new
+                    {
+                        assetClassCode  = reader.GetSafeString("AssetClassCode"),
+                        assetClassName  = reader.GetSafeString("AssetClassName") ?? "Không tên",
+                        departmentCode  = reader.GetSafeString("DepartmentCode"),
+                        locationCode    = reader.GetSafeString("LocationCode"),
+                        slvgQty         = reader.GetSafeDecimal("SlvgQty"),
+                        phisLoc         = reader.GetSafeString("PhisLoc"),
+                        phisUser        = reader.GetSafeString("PhisUser"),
+                        imagePath       = reader.GetSafeString("ImagePath")
+                    });
+                }
+
+                if (results.Count == 0)
+                    return Ok(new { success = false, message = "Không tìm thấy tài sản", data = new List<object>() });
+
+                return Ok(new { success = true, data = results });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi tìm kiếm: {ex.Message}" });
+            }
+        }
+
+        private async Task<int> CalculateBadgeCount()
+        {
+            await using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync();
+            const string sql = @"SELECT COUNT(*) FROM QRAssetPhisical WHERE CreatedDate > DATEADD(minute, -60, GETDATE())";
+            await using var cmd = new SqlCommand(sql, conn);
+            var count = await cmd.ExecuteScalarAsync();
+            return Convert.ToInt32(count ?? 0);
+        }
+
+        // HÀM TẠO QR HÀNG LOẠT - Đã đặt đúng vị trí BÊN TRONG CLASS
+        [HttpPost("generate-batch")]
+        public async Task<IActionResult> GenerateBatchQR([FromBody] GenerateBatchRequest request)
+        {
+            if (request?.Codes == null || request.Codes.Count == 0)
+                return BadRequest(new { success = false, message = "Danh sách mã tài sản rỗng" });
+
+            try
+            {
+                await using var connection = new SqlConnection(_connectionString);
+                await connection.OpenAsync();
+
+                int insertedCount = 0;
+
+                const string sql = @"
+                    IF NOT EXISTS (SELECT 1 FROM QRAsset WHERE AssetClassCode = @AssetClassCode)
+                    BEGIN
+                        INSERT INTO QRAsset (
+                            AssetClassCode, 
+                            QRCode,
+                            CreatedDate, 
+                            CreatedBy,
+                            ImagePath
+                        )
+                        VALUES (
+                            @AssetClassCode,
+                            @QRCode,
+                            GETDATE(),
+                            @CreatedBy,
+                            NULL
+                        );
+                    END";
+
+                foreach (var code in request.Codes)
+                {
+                    if (string.IsNullOrWhiteSpace(code)) continue;
+
+                    await using var cmd = new SqlCommand(sql, connection);
+
+                    cmd.Parameters.AddWithValue("@AssetClassCode", code.Trim());
+                    cmd.Parameters.AddWithValue("@QRCode", $"HPAPP:{code.Trim()}");
+                    cmd.Parameters.AddWithValue("@CreatedBy", request.CreatedBy ?? "MobileApp");
+
+                    insertedCount += await cmd.ExecuteNonQueryAsync();
+                }
+
+                return Ok(new 
+                { 
+                    success = true, 
+                    message = $"Đã tạo/cập nhật {insertedCount} QR code",
+                    count = insertedCount 
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Lỗi GenerateBatchQR: {ex.Message}\n{ex.StackTrace}");
+                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
+            }
         }
     }
-}
 
-// Model nằm ngoài class controller
-public class GenerateQrRequest
-{
-    public List<string>? Codes { get; set; }
-    public string? CreatedBy { get; set; }
+    // Extension methods để đọc an toàn
+    internal static class SqlDataReaderExtensions
+    {
+        public static string GetSafeString(this SqlDataReader reader, string columnName)
+        {
+            int ordinal = reader.GetOrdinal(columnName);
+            return reader.IsDBNull(ordinal) ? "" : reader.GetString(ordinal).Trim();
+        }
+
+        public static decimal GetSafeDecimal(this SqlDataReader reader, string columnName)
+        {
+            int ordinal = reader.GetOrdinal(columnName);
+            return reader.IsDBNull(ordinal) ? 0m : reader.GetDecimal(ordinal);
+        }
+    }
+
+    // Các model (đặt ngoài class, trong namespace)
+    public class SaveAssetPhysicalRequest
+    {
+        public List<AssetPhysicalItem> Items { get; set; } = new();
+    }
+
+    public class AssetPhysicalItem
+    {
+        public string AssetClassCode { get; set; } = string.Empty;
+        public decimal Vend { get; set; }
+        public decimal Vphis { get; set; }
+        public string? LocationCode { get; set; }
+        public string? DepartmentCode { get; set; }
+        public string Vperiod { get; set; } = string.Empty;
+        public string? CreatedBy { get; set; }
+    }
+
+    public class SearchAssetRequest
+    {
+        public string? AssetCode { get; set; }
+    }
+
+    public class GenerateBatchRequest
+    {
+        public List<string> Codes { get; set; } = new();
+        public string? CreatedBy { get; set; }
+    }
 }

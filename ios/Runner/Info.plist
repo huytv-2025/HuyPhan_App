@@ -33,6 +33,8 @@
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
+		<string>fetch</string>           <!-- cho background fetch -->
+    	<string>remote-notification</string> <!-- cho push nếu cần -->
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
@@ -45,8 +47,13 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIApplicationSupportsMultipleScenes</key>
+	<false/>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>Ứng dụng cần hiển thị badge để thông báo số lượng mới.</string>
 	<key>NSCameraUsageDescription</key>
 <string>Ứng dụng cần truy cập camera để quét mã QR và kiểm kê hàng hóa.</string>
+
 
 <!-- Tùy chọn: nếu bạn dùng image_picker để chọn ảnh từ thư viện -->
 <key>NSPhotoLibraryUsageDescription</key>
