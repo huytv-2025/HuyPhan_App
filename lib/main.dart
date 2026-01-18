@@ -9,14 +9,6 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math' as math;
 import 'dart:async';
-import 'package:background_fetch/background_fetch.dart';
-import 'dart:io' show Platform;
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-
-import 'package:app_badge_plus/app_badge_plus.dart';
-
-final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-    FlutterLocalNotificationsPlugin();
 
 
 
@@ -156,8 +148,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (response.statusCode == 200 && data['success'] == true) {
       // Đảm bảo baseUrl đã được set (gọi lại để chắc chắn)
       _updateApiUrl();
-      await _initBackgroundFetch();
-
+    
       if (!mounted) return;  // Tránh dùng context khi widget đã dispose
 
       Navigator.pushReplacement(
@@ -3992,126 +3983,5 @@ class Particle {
     vel = Offset(vel.dx * 0.98, vel.dy + 0.15); // rơi nhẹ
     alpha -= 0.02;
     return this;
-  }
-}
-// Background callback (phải top-level)
-@pragma('vm:entry-point')
-void backgroundFetchHeadlessTask(HeadlessTask task) async {
-  String taskId = task.taskId;
-  bool isTimeout = task.timeout;
-
-  if (isTimeout) {
-    BackgroundFetch.finish(taskId);
-    return;
-  }
-
-  // Logic tính "mới" (giả lập hoặc gọi API nhẹ nếu có mạng)
-  int count = await _getNewCount();
-
-  // Update badge
-  await AppBadgePlus.updateBadge(count);
-
-  // Lưu thời gian check
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setInt('last_badge_check', DateTime.now().millisecondsSinceEpoch);
-
-  BackgroundFetch.finish(taskId);
-}
-
-// Hàm tính count (bạn tự chỉnh)
-Future<int> _getNewCount() async {
-  final prefs = await SharedPreferences.getInstance();
-  final last = prefs.getInt('last_badge_check') ?? 0;
-  final hours = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(last)).inHours;
-
-  // Giả lập: tăng dần theo thời gian
-  return (hours * 2 + math.Random().nextInt(3)).clamp(0, 99);
-}
-
-Future<void> _initBackgroundFetch() async {
-  // 1. Khởi tạo flutter_local_notifications (bắt buộc trước khi request permission)
-  const AndroidInitializationSettings androidInit =
-      AndroidInitializationSettings('@mipmap/ic_launcher'); // thay bằng icon app của bạn nếu khác
-
-  const DarwinInitializationSettings iosInit = DarwinInitializationSettings(
-    requestAlertPermission: true,
-    requestBadgePermission: true,
-    requestSoundPermission: true,
-  );
-
-  const InitializationSettings initSettings = InitializationSettings(
-    android: androidInit,
-    iOS: iosInit,
-  );
-
-  // Init plugin
-  await flutterLocalNotificationsPlugin.initialize(initSettings);
-
-  // 2. Request permissions (chỉ cần cho iOS/macOS)
-if (Platform.isIOS) {
-  final iosImplementation = flutterLocalNotificationsPlugin
-      .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
-
-  if (iosImplementation != null) {
-    await iosImplementation.requestPermissions(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-  } else {
-    print('iOS implementation not available');
-  }
-} else if (Platform.isMacOS) {
-  final macosImplementation = flutterLocalNotificationsPlugin
-      .resolvePlatformSpecificImplementation<MacOSFlutterLocalNotificationsPlugin>();
-
-  if (macosImplementation != null) {
-    await macosImplementation.requestPermissions(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-  } else {
-    print('macOS implementation not available');
-  }
-}
-
-  // 3. Config BackgroundFetch
-  BackgroundFetch.configure(
-    BackgroundFetchConfig(
-      minimumFetchInterval: 15,
-      stopOnTerminate: false,
-      enableHeadless: true,
-      startOnBoot: true,
-      requiresBatteryNotLow: false,
-      requiresCharging: false,
-      requiresStorageNotLow: false,
-      requiresDeviceIdle: false,
-      requiredNetworkType: NetworkType.ANY,
-    ),
-    (String taskId) async {
-      // Callback foreground/background
-      try {
-        int count = await _getNewCount();
-        await AppBadgePlus.updateBadge(count);
-      } catch (e) {
-        print('Background fetch error: $e');
-      }
-      BackgroundFetch.finish(taskId);
-    },
-    (String taskId) {
-      // Timeout
-      BackgroundFetch.finish(taskId);
-    },
-  );
-
-  // 4. Đăng ký headless task
-  BackgroundFetch.registerHeadlessTask(backgroundFetchHeadlessTask);
-
-  // 5. Reset badge khi mở app
-  try {
-    await AppBadgePlus.updateBadge(0);
-  } catch (e) {
-    print('Remove badge error: $e');
   }
 }
