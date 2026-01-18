@@ -7,9 +7,17 @@ namespace HuyPhanApi.Controllers;
 [Route("api/[controller]")]
 public class InventoryController : ControllerBase
 {
-    private readonly string _connectionString =
-        "Server=.;Database=SMILE_BO;User Id=Smile;Password=AnhMinh167TruongDinh;TrustServerCertificate=True;";
+    // ← THÊM DÒNG NÀY nếu thiếu (rất quan trọng!)
+    private readonly string _connectionString;
+    public InventoryController(IConfiguration configuration
+        // , FcmService? fcmService = null   // Uncomment nếu cần FCM
+        )
+    {
+        _connectionString = configuration.GetConnectionString("Default")
+            ?? throw new InvalidOperationException("Không tìm thấy connection string 'Default' trong configuration (appsettings/secrets/env vars).");
 
+        // _fcmService = fcmService;   // Uncomment nếu cần
+    }
     // GET: api/inventory?vperiod=...&search=...
     [HttpGet("")]
     public async Task<IActionResult> Get([FromQuery] string? vperiod, [FromQuery] string? search)

@@ -7,9 +7,14 @@ namespace HuyPhanApi.Controllers;
 [Route("api/[controller]")]
 public class LoginController : ControllerBase
 {
-    private readonly string _connectionString = 
-        "Server=.;Database=SMILE_BO;User Id=Smile;Password=AnhMinh167TruongDinh;TrustServerCertificate=True;";
+    private readonly string _connectionString;
 
+    // Inject IConfiguration vào constructor
+    public LoginController(IConfiguration configuration)
+    {
+        _connectionString = configuration.GetConnectionString("Default")
+            ?? throw new InvalidOperationException("Không tìm thấy connection string 'Default'");
+    }
     [HttpPost]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {

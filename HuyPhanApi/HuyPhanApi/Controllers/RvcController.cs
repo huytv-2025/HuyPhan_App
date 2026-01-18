@@ -9,9 +9,16 @@ namespace HuyPhanApi.Controllers
     [Route("api/[controller]")]
     public class RvcController : ControllerBase
     {
-        private readonly string _connectionString =
-            "Server=.;Database=SMILE_BO;User Id=Smile;Password=AnhMinh167TruongDinh;TrustServerCertificate=True;";
+        private readonly string _connectionString;
 
+        // Inject IConfiguration
+        public RvcController(IConfiguration configuration)
+        {
+            _connectionString = configuration.GetConnectionString("Default")
+                ?? throw new InvalidOperationException(
+                    "Không tìm thấy connection string 'Default' trong configuration " +
+                    "(appsettings.json / secrets.json / environment variables).");
+        }
         // GET: api/rvc
         // hoặc api/rvcdeftlist nếu bạn muốn tên cũ
         [HttpGet]

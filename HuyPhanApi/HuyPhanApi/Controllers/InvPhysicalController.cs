@@ -20,7 +20,10 @@ namespace HuyPhanApi.Controllers
             FcmService fcmService) // ← Thêm FcmService vào constructor
         {
             _connectionString = configuration.GetConnectionString("Default") 
-                ?? "Server=.;Database=SMILE_BO;User Id=Smile;Password=AnhMinh167TruongDinh;TrustServerCertificate=True;";
+                ?? throw new InvalidOperationException(
+                    "Không tìm thấy connection string 'Default' trong configuration " +
+                    "(appsettings.json / secrets.json / environment variables).");
+
             _fcmService = fcmService;
         }
         [HttpPost("save")]

@@ -22,7 +22,8 @@ namespace HuyPhanApi.Controllers
             FcmService? fcmService = null)
         {
             _connectionString = configuration.GetConnectionString("Default")
-                ?? "Server=.;Database=SMILE_BO;User Id=Smile;Password=AnhMinh167TruongDinh;TrustServerCertificate=True;";
+                ?? throw new InvalidOperationException("Không tìm thấy connection string 'Default' trong configuration.");
+
             _fcmService = fcmService;
         }
 
