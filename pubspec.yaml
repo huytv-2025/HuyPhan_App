@@ -20,9 +20,7 @@ dependencies:
   permission_handler: ^11.3.1
   shared_preferences: ^2.3.0
   badges: ^3.1.2
-  background_fetch: ^1.2.2
-  app_badge_plus: ^1.0.0
-  flutter_local_notifications: ^17.2.4
+
   
 
 
