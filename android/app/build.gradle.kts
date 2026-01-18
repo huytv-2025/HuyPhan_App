@@ -14,10 +14,10 @@ android {
     ndkVersion = "27.0.12077973"  // Giữ giá trị bạn set (hoặc flutter.ndkVersion nếu muốn dynamic)
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-        isCoreLibraryDesugaringEnabled = true  // ← BẮT BUỘC thêm dòng này để bật desugaring (bạn thiếu trước đó)
-    }
+    isCoreLibraryDesugaringEnabled = true  // hoặc coreLibraryDesugaringEnabled = true nếu dùng Groovy
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
 
     // kotlinOptions bị deprecated ở Kotlin 2.0+ → migrate sang compilerOptions
     kotlin {
@@ -52,6 +52,5 @@ flutter {
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")  // Phiên bản ổn định, hỗ trợ Java 17 tốt
-    // Nếu muốn version mới hơn (nếu AGP >=8.5): "2.1.2" hoặc "2.0.3" tùy test
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }
