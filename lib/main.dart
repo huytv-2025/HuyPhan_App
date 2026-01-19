@@ -179,148 +179,231 @@ class _LoginScreenState extends State<LoginScreen> {
         height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color.fromARGB(255, 184, 230, 236), Color.fromARGB(255, 191, 220, 224), Color.fromARGB(255, 193, 214, 217)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFE0F7FA), // xanh nhạt
+              Color(0xFFB2EBF2),
+              Color(0xFF80DEEA),
+            ],
           ),
         ),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Card(
-                elevation: 20,
-                shadowColor: const Color.fromARGB(115, 0, 0, 0),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
-                child: Container(
-                  constraints: const BoxConstraints(maxWidth: 450),
-                  padding: const EdgeInsets.all(40.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 140,
-                        height: 140,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 6),
-                          boxShadow: const [
-                            BoxShadow(color: Colors.black26, blurRadius: 20, offset: Offset(0, 10)),
-                          ],
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Avatar tròn + hiệu ứng nổi nhẹ (bỏ viền trắng dày)
+                  Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.12),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
                         ),
-                        child: ClipOval(
-                          child: Image.asset(
-                            'assets/images/app_icon.png',
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Icon(Icons.lock_person_rounded, size: 80, color: Colors.teal);
-                            },
-                          ),
-                        ),
+                      ],
+                    ),
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/images/app_icon.png',
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
+                            Icons.lock_person_rounded,
+                            size: 70,
+                            color: Colors.teal,
+                          );
+                        },
                       ),
-                      const SizedBox(height: 30),
-                      const Text('Huy Phan', style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.teal, letterSpacing: 1.2)),
-                      const Text('Đăng Nhập Hệ Thống', style: TextStyle(fontSize: 20, color: Color.fromARGB(255, 173, 219, 214), fontWeight: FontWeight.w500)),
-                      // ← THÊM NÚT NÀY
-const SizedBox(height: 25),
-SizedBox(
-  width: double.infinity,
-  child: ElevatedButton.icon(
-    onPressed: () {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const GameScreen()),
-      );
-    },
-    icon: const Icon(Icons.sports_soccer, size: 28, color: Colors.white),
-    label: const Text(
-      '🎮 Chơi Ném Bóng Vào Ly Để Vào App!',
-      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-    ),
-    style: ElevatedButton.styleFrom(
-      backgroundColor: Colors.orangeAccent.shade700,
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
-      elevation: 10,
-    ),
-  ),
-),
-
-                      const SizedBox(height: 40),
-                      TextField(
-                        controller: _ipController,
-                        keyboardType: TextInputType.text,
-                        decoration: InputDecoration(
-                          labelText: 'IP Server',
-                          hintText: 'Ví dụ: 192.168.1.100 hoặc 10.0.2.2',
-                          prefixIcon: const Icon(Icons.computer),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(20)),
-                          filled: true,
-                          fillColor: Colors.grey[50],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _portController,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: 'Port',
-                          hintText: 'Có thể để trống nếu ko dùng port',
-                          prefixIcon: const Icon(Icons.settings_ethernet),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(20)),
-                          filled: true,
-                          fillColor: Colors.grey[50],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      TextField(
-                        controller: _clerkIdController,
-                        decoration: InputDecoration(
-                          labelText: 'ClerkID',
-                          prefixIcon: const Icon(Icons.person_outline),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(20)),
-                          filled: true,
-                          fillColor: Colors.grey[50],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _securityCodeController,
-                        obscureText: true,
-                        decoration: InputDecoration(
-                          labelText: 'Security Code',
-                          prefixIcon: const Icon(Icons.vpn_key),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(20)),
-                          filled: true,
-                          fillColor: Colors.grey[50],
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 60,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _login,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.teal,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                            elevation: 12,
-                          ),
-                          child: _isLoading
-                              ? const CircularProgressIndicator(color: Colors.white)
-                              : const Text('ĐĂNG NHẬP', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        _errorMessage,
-                        style: const TextStyle(color: Color.fromARGB(255, 219, 152, 152), fontSize: 16),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+
+                  const SizedBox(height: 32),
+
+                  // Tiêu đề
+                  const Text(
+                    'Huy Phan',
+                    style: TextStyle(
+                      fontSize: 42,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF00695C),
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Đăng nhập hệ thống',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.teal.shade700,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+
+                  const SizedBox(height: 40),
+
+                  // Nút chơi game đặc biệt (giữ nguyên)
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const GameScreen()),
+                        );
+                      },
+                      icon: const Icon(Icons.sports_soccer, size: 15),
+                      label: const Text(
+                        '🎮 Chơi Ném Bóng Vào Ly Để Vào App!',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color.fromARGB(255, 0, 157, 255),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        elevation: 8,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 35),
+
+                  // Card chứa form đăng nhập - phong cách pngtree
+                  Container(
+                    width: double.infinity,
+                    constraints: const BoxConstraints(maxWidth: 380),
+                    padding: const EdgeInsets.all(30),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(28),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.12),
+                          blurRadius: 30,
+                          offset: const Offset(0, 15),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        // IP + Port (giữ nguyên)
+                        TextField(
+                          controller: _ipController,
+                          decoration: InputDecoration(
+                            labelText: 'IP Server',
+                            hintText: 'Ví dụ: 192.168.1.100',
+                            prefixIcon: const Icon(Icons.computer, color: Colors.teal),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        TextField(
+                          controller: _portController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: 'Port (tùy chọn)',
+                            prefixIcon: const Icon(Icons.settings_ethernet, color: Colors.teal),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // ClerkID
+                        TextField(
+                          controller: _clerkIdController,
+                          decoration: InputDecoration(
+                            labelText: 'ClerkID',
+                            prefixIcon: const Icon(Icons.person_outline, color: Colors.teal),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Security Code
+                        TextField(
+                          controller: _securityCodeController,
+                          obscureText: true,
+                          decoration: InputDecoration(
+                            labelText: 'Security Code',
+                            prefixIcon: const Icon(Icons.vpn_key, color: Colors.teal),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+
+                        // Nút Login
+                        SizedBox(
+                          width: double.infinity,
+                          height: 58,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _login,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF009688),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              elevation: 6,
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
+                                  )
+                                : const Text(
+                                    'ĐĂNG NHẬP',
+                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                                  ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Error message
+                        if (_errorMessage.isNotEmpty)
+                          Text(
+                            _errorMessage,
+                            style: const TextStyle(color: Colors.redAccent, fontSize: 15),
+                            textAlign: TextAlign.center,
+                          ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 40),
+                ],
               ),
             ),
           ),
@@ -880,73 +963,91 @@ class AssetCheckScreen extends StatefulWidget {
 class _AssetCheckScreenState extends State<AssetCheckScreen> {
   List<Map<String, String>> assetList = [];
   bool isLoading = false;
-  final TextEditingController _searchController = TextEditingController();
-  String get baseUrl => AppConfig.baseUrl;
+  bool _isScanning = false;
+  String? _scanMessage;
+  final MobileScannerController cameraController = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates,
+    facing: CameraFacing.back,
+  );
+  List<dynamic> assets = [];
+  // Hai controller riêng cho hai trường tìm kiếm
+  final TextEditingController _assetCodeController = TextEditingController();
+  final TextEditingController _locationCodeController = TextEditingController();
 
-  List<Map<String, String>> get filteredList {
-    final query = _searchController.text.toLowerCase().trim();
-    return assetList.where((item) {
-      final String code = item['AssetClassCode'] ?? '';
-      final String name = item['AssetClassName'] ?? '';
-      final String dept = item['DepartmentCode'] ?? '';
-      return code.toLowerCase().contains(query) ||
-             name.toLowerCase().contains(query) ||
-             dept.toLowerCase().contains(query);
-    }).toList();
-  }
+  String get baseUrl => AppConfig.baseUrl;
 
   @override
   void initState() {
     super.initState();
-    _loadAssets();
+    _loadAssets(); // Tải lần đầu không filter
   }
 
   Future<void> _loadAssets() async {
-  if (baseUrl.isEmpty) {
-    EasyLoading.showError('Chưa đăng nhập');
-    return;
-  }
-
-  EasyLoading.show(status: 'Đang tải danh sách tài sản...');
-  setState(() => isLoading = true);
-
-  try {
-    // Endpoint đúng: /api/asset-physical/get
-    var url = '$baseUrl/api/asset-physical/get';
-
-    // Nếu có tìm kiếm theo tên tài sản
-    final search = _searchController.text.trim();
-    if (search.isNotEmpty) {
-      url += '?assetClassName=${Uri.encodeComponent(search)}';
+    if (baseUrl.isEmpty) {
+      EasyLoading.showError('Chưa đăng nhập hoặc baseUrl rỗng');
+      return;
     }
 
-    print('Gọi API tài sản: $url'); // Debug để kiểm tra
+    setState(() => isLoading = true);
+    EasyLoading.show(status: 'Đang tải danh sách tài sản...');
 
-    final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
+    try {
+      // Endpoint chính
+      var url = '$baseUrl/api/asset-physical/get';
 
-    print('Status: ${response.statusCode} | Body đầu: ${response.body.substring(0, response.body.length.clamp(0, 300))}...');
+      // Xây dựng query parameters
+      final queryParams = <String, String>{};
 
-    if (response.statusCode == 200) {
-      final List<dynamic> rawData = jsonDecode(response.body);
-      setState(() {
-        assetList = rawData.map<Map<String, String>>((item) => {
-          'AssetClassCode': item['AssetClassCode']?.toString().trim() ?? '',
-          'AssetClassName': item['AssetClassName']?.toString().trim() ?? 'Không tên',
-          'imagePath': item['imagePath']?.toString().trim() ?? '',  // Nếu backend trả imagePath
-        }).toList();
-      });
-    } else {
-      EasyLoading.showError('Lỗi server: ${response.statusCode}');
-      print('Lỗi response: ${response.body}');
+      final assetClassCode = _assetCodeController.text.trim();
+      if (assetClassCode.isNotEmpty) {
+        // Tùy backend: có thể là assetCode, assetClassCode, assetItemCode
+        // Giả sử backend hỗ trợ assetCode hoặc assetClassCode
+        queryParams['assetClassCode'] =assetClassCode;           // Hoặc 'assetClassCode'
+        // Nếu backend dùng assetItemCode thì đổi thành: queryParams['assetItemCode'] = assetCode;
+      }
+
+      final locationCode = _locationCodeController.text.trim();
+      if (locationCode.isNotEmpty) {
+        queryParams['locationCode'] = locationCode;
+      }
+
+      // Nếu có tham số thì thêm vào URL
+      if (queryParams.isNotEmpty) {
+        url += '?${Uri(queryParameters: queryParams).query}';
+      }
+
+      print('Gọi API tài sản: $url'); // Debug
+
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
+
+      print('Status: ${response.statusCode} | Body đầu: ${response.body.substring(0, response.body.length.clamp(0, 300))}...');
+
+      if (response.statusCode == 200) {
+        final List<dynamic> rawData = jsonDecode(response.body);
+        setState(() {
+          assetList = rawData.map<Map<String, String>>((item) => {
+            'AssetClassCode': item['AssetClassCode']?.toString().trim() ?? '',
+            'AssetClassName': item['AssetClassName']?.toString().trim() ?? 'Không tên',
+            'DepartmentCode': item['DepartmentCode']?.toString().trim() ?? '',
+            'LocationCode': item['LocationCode']?.toString().trim() ?? '',
+            'SlvgQty': item['SlvgQty']?.toString() ?? '0',
+            'PhisUser': item['PhisUser']?.toString().trim() ?? '',
+            'PhisLoc': item['PhisLoc']?.toString().trim() ?? '',
+            'imagePath': item['imagePath']?.toString().trim() ?? '',
+          }).toList();
+        });
+      } else {
+        EasyLoading.showError('Lỗi server: ${response.statusCode}');
+        print('Lỗi response: ${response.body}');
+      }
+    } catch (e) {
+      print('Lỗi tải tài sản: $e');
+      EasyLoading.showError('Không thể tải dữ liệu: $e');
+    } finally {
+      EasyLoading.dismiss();
+      if (mounted) setState(() => isLoading = false);
     }
-  } catch (e) {
-    print('Lỗi tải tài sản: $e');
-    EasyLoading.showError('Không thể tải dữ liệu: $e');
-  } finally {
-    EasyLoading.dismiss();
-    setState(() => isLoading = false);
   }
-}
 
   void _showQRDialog(String code, String name, String qty) {
     final String qrData = 'HPAPP:$code';
@@ -959,7 +1060,13 @@ class _AssetCheckScreenState extends State<AssetCheckScreen> {
           height: 420,
           child: Column(
             children: [
-              QrImageView(data: qrData, version: QrVersions.auto, size: 250, backgroundColor: Colors.white, errorCorrectionLevel: QrErrorCorrectLevel.H),
+              QrImageView(
+                data: qrData,
+                version: QrVersions.auto,
+                size: 250,
+                backgroundColor: Colors.white,
+                errorCorrectionLevel: QrErrorCorrectLevel.H,
+              ),
               const SizedBox(height: 20),
               Text('Mã TS/CCDC: $code', style: const TextStyle(fontWeight: FontWeight.bold)),
               Text('Số lượng: $qty', style: const TextStyle(color: Colors.green)),
@@ -972,138 +1079,317 @@ class _AssetCheckScreenState extends State<AssetCheckScreen> {
       ),
     );
   }
-String formatCleanQty(dynamic qty) {
-  if (qty == null || qty == 0) return '0';
 
-  // Chuyển thành chuỗi, loại bỏ dấu phẩy (nếu có từ dữ liệu cũ)
-  String str = qty.toString().replaceAll(',', '');
-
-  // Nếu không có dấu chấm → trả về nguyên bản (số nguyên)
-  if (!str.contains('.')) {
-    return str;
+  String formatCleanQty(dynamic qty) {
+    if (qty == null || qty == 0) return '0';
+    String str = qty.toString().replaceAll(',', '');
+    if (!str.contains('.')) return str;
+    final parts = str.split('.');
+    final integerPart = parts[0];
+    String decimalPart = parts.length > 1 ? parts[1] : '';
+    if (decimalPart.replaceAll('0', '').isEmpty) return integerPart;
+    decimalPart = decimalPart.replaceAll(RegExp(r'0+$'), '');
+    if (decimalPart.isEmpty) return integerPart;
+    return '$integerPart.$decimalPart';
+  }
+void _processScan(String? code) {
+  if (code == null || code.trim().isEmpty) {
+    setState(() {
+      _scanMessage = 'Không quét được mã hợp lệ';
+    });
+    return;
   }
 
-  // Tách phần nguyên và thập phân
-  final parts = str.split('.');
-  final integerPart = parts[0];
-  String decimalPart = parts.length > 1 ? parts[1] : '';
+  final String scannedCode = code.trim();
 
-  // Nếu phần thập phân toàn 0 → chỉ giữ phần nguyên
-  if (decimalPart.replaceAll('0', '').isEmpty) {
-    return integerPart;
-  }
+  setState(() {
+    _scanMessage = 'Đã quét thành công: $scannedCode\nĐang tìm kiếm...';
+    isLoading = true;
+    _isScanning = false;  // Tắt camera ngay sau khi quét
+  });
 
-  // Nếu có thập phân thực → loại bỏ 0 thừa ở cuối, và loại bỏ dấu chấm nếu không còn thập phân
-  decimalPart = decimalPart.replaceAll(RegExp(r'0+$'), '');
-  if (decimalPart.isEmpty) {
-    return integerPart;
-  }
+  // Logic xử lý mã quét: tự động điền vào ô tìm kiếm và tải lại danh sách
+  _assetCodeController.text = scannedCode;
 
-  return '$integerPart.$decimalPart';
+  // Gọi hàm tải dữ liệu (đã có sẵn trong code của bạn)
+  _loadAssets().then((_) {
+    setState(() {
+      _scanMessage = 'Tìm thấy dữ liệu cho mã: $scannedCode';
+      isLoading = false;
+    });
+  }).catchError((e) {
+    setState(() {
+      _scanMessage = 'Lỗi khi tải dữ liệu: $e';
+      isLoading = false;
+    });
+  });
+
+  // Tùy chọn: tự động tắt thông báo sau 5 giây
+  Future.delayed(const Duration(seconds: 5), () {
+    if (mounted) {
+      setState(() => _scanMessage = null);
+    }
+  });
 }
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Tìm mã, tên, phòng ban...',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-                    filled: true,
-                    fillColor: Colors.grey[100],
+ @override
+Widget build(BuildContext context) {
+  return Scaffold(
+    body: Column(
+      children: [
+        // Phần tìm kiếm - giữ nguyên
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _assetCodeController,
+                      decoration: InputDecoration(
+                        labelText: 'Mã TS/CCDC',
+                        hintText: 'VD: TSCD001, PC-001...',
+                        prefixIcon: const Icon(Icons.qr_code_2, color: Colors.deepPurple),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                      ),
+                      onSubmitted: (_) => _loadAssets(),
+                    ),
                   ),
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  onPressed: isLoading ? null : _loadAssets,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Tải lại dữ liệu'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                    minimumSize: const Size.fromHeight(50),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _locationCodeController,
+                      decoration: InputDecoration(
+                        labelText: 'Mã vị trí',
+                        hintText: 'VD: KHO01, P.KE TOAN...',
+                        prefixIcon: const Icon(Icons.location_on, color: Colors.deepPurple),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                      ),
+                      onSubmitted: (_) => _loadAssets(),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.search),
+                      label: const Text('Tìm kiếm'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.deepPurple,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      ),
+                      onPressed: isLoading ? null : _loadAssets,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  IconButton(
+                    icon: const Icon(Icons.refresh, color: Colors.deepPurple),
+                    tooltip: 'Tải lại toàn bộ',
+                    onPressed: () {
+                      _assetCodeController.clear();
+                      _locationCodeController.clear();
+                      _loadAssets();
+                    },
+                  ),
+                ],
+              ),
+            ],
           ),
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : filteredList.isEmpty
-                    ? const Center(child: Text('Không có dữ liệu', style: TextStyle(fontSize: 18)))
-                    : SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: DataTable(
-                          headingRowColor: WidgetStateProperty.all(Colors.deepPurple.shade50),
-                          dataRowMinHeight: 80,
-                          dataRowMaxHeight: 100,
-                          columns: const [
-                            DataColumn(label: Text('Mã TS/CCDC', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('Tên tài sản', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('Phòng ban', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('Vị trí', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('Số lượng', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('Người dùng', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('QR', style: TextStyle(fontWeight: FontWeight.bold))),
-                          ],
-                          rows: filteredList.map((item) {
-                            final String code = item['AssetClassCode'] ?? '';
-                            final String name = item['AssetClassName'] ?? '';
-                            final String qty = item['SlvgQty'] ?? '0';
-                            final String dept = item['DepartmentCode'] ?? '';
-                            final String loc = item['LocationCode'] ?? item['PhisLoc'] ?? '';
-                            final String user = item['PhisUser'] ?? '';
-                            return DataRow(
-                              cells: [
-                                DataCell(Text(code, style: const TextStyle(fontWeight: FontWeight.w600))),
-                                DataCell(Text(name)),
-                                DataCell(Text(dept)),
-                                DataCell(Text(loc)),
-                                DataCell(Text(formatCleanQty(item['SlvgQty']), style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold))),
-                                DataCell(Text(user)),
-                                DataCell(
-                                  GestureDetector(
-                                    onTap: () => _showQRDialog(code, name, qty),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                      decoration: BoxDecoration(color: Colors.deepPurple.shade100, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.deepPurple)),
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.qr_code_scanner, color: Color.fromARGB(255, 141, 105, 202), size: 20),
-                                          SizedBox(width: 8),
-                                          Text('Xem QR', style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold)),
-                                        ],
+        ),
+
+        // Phần chính: camera hoặc danh sách
+        Expanded(
+          child: isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _isScanning
+                  ? Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        // Camera thuần túy, không overlay đen, không khung QR
+                        MobileScanner(
+                          controller: cameraController,
+                          onDetect: (capture) {
+                            final qr = capture.barcodes.firstOrNull?.rawValue;
+                            if (qr != null && _isScanning) {
+                              setState(() => _isScanning = false);
+                              _processScan(qr);
+                            }
+                          },
+                        ),
+
+                        // Nút đóng (close) ở góc trên phải
+                        Positioned(
+                          top: 16,
+                          right: 16,
+                          child: IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white, size: 40),
+                            onPressed: () => setState(() => _isScanning = false),
+                          ),
+                        ),
+
+                        // (Tùy chọn) Thông báo quét nếu có
+                        if (_scanMessage != null)
+                          Positioned(
+                            bottom: 40,
+                            left: 24,
+                            right: 24,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.7),
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              child: Text(
+                                _scanMessage!,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                      ],
+                    )
+                  : assetList.isEmpty
+                      ? const Center(child: Text('Không có dữ liệu', style: TextStyle(fontSize: 18)))
+                      : SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: DataTable(
+                            headingRowColor: WidgetStateProperty.all(Colors.deepPurple.shade50),
+                            dataRowMinHeight: 80,
+                            dataRowMaxHeight: 100,
+                            columns: const [
+                              DataColumn(label: Text('Mã TS/CCDC', style: TextStyle(fontWeight: FontWeight.bold))),
+                              DataColumn(label: Text('Tên tài sản', style: TextStyle(fontWeight: FontWeight.bold))),
+                              DataColumn(label: Text('Phòng ban', style: TextStyle(fontWeight: FontWeight.bold))),
+                              DataColumn(label: Text('Vị trí', style: TextStyle(fontWeight: FontWeight.bold))),
+                              DataColumn(label: Text('Số lượng', style: TextStyle(fontWeight: FontWeight.bold))),
+                              DataColumn(label: Text('Người dùng', style: TextStyle(fontWeight: FontWeight.bold))),
+                              DataColumn(label: Text('QR', style: TextStyle(fontWeight: FontWeight.bold))),
+                            ],
+                            rows: assetList.map((item) {
+                              final String code = item['AssetClassCode'] ?? '';
+                              final String name = item['AssetClassName'] ?? '';
+                              final String qty = item['SlvgQty'] ?? '0';
+                              final String dept = item['DepartmentCode'] ?? '';
+                              final String loc = item['LocationCode'] ?? item['PhisLoc'] ?? '';
+                              final String user = item['PhisUser'] ?? '';
+                              return DataRow(
+                                cells: [
+                                  DataCell(Text(code, style: const TextStyle(fontWeight: FontWeight.w600))),
+                                  DataCell(Text(name)),
+                                  DataCell(Text(dept)),
+                                  DataCell(Text(loc)),
+                                  DataCell(Text(formatCleanQty(qty), style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold))),
+                                  DataCell(Text(user)),
+                                  DataCell(
+                                    GestureDetector(
+                                      onTap: () => _showQRDialog(code, name, qty),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: Colors.deepPurple.shade100,
+                                          borderRadius: BorderRadius.circular(20),
+                                          border: Border.all(color: Colors.deepPurple),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.qr_code_scanner, color: Color.fromARGB(255, 141, 105, 202), size: 20),
+                                            SizedBox(width: 8),
+                                            Text('Xem QR', style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold)),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ],
-                            );
-                          }).toList(),
+                                ],
+                              );
+                            }).toList(),
+                          ),
                         ),
-                      ),
-          ),
-        ],
-      ),
-    );
-  }
+        ),
 
+        // Nút bật camera - chỉ hiển thị khi KHÔNG đang quét
+        if (!_isScanning)
+          Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Align(
+              alignment: Alignment.bottomRight,
+              child: FloatingActionButton.extended(
+                onPressed: () {
+                  setState(() {
+                    _isScanning = true;
+                    _scanMessage = null;
+                  });
+                },
+                backgroundColor: Colors.deepPurple.shade700,
+                icon: const Icon(Icons.camera_alt),
+                label: const Text('Bật Camera'),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+}
   @override
   void dispose() {
-    _searchController.dispose();
+    _assetCodeController.dispose();
+    _locationCodeController.dispose();
+    _scanMessage = null;
     super.dispose();
   }
 }
 
+class QRScannerOverlay extends StatelessWidget {
+  const QRScannerOverlay({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size.width * 0.7; // kích thước khung ~70% màn hình
+
+    return Center(
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: Stack(
+          children: [
+            // 4 góc xanh (tương tự ảnh bạn từng gửi)
+            Positioned(top: 0, left: 0, child: _corner()),
+            Positioned(top: 0, right: 0, child: Transform.rotate(angle: 3.14159 / 2, child: _corner())),
+            Positioned(bottom: 0, left: 0, child: Transform.rotate(angle: -3.14159 / 2, child: _corner())),
+            Positioned(bottom: 0, right: 0, child: Transform.rotate(angle: 3.14159, child: _corner())),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _corner() {
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: const BoxDecoration(
+        border: Border(
+          left: BorderSide(color: Colors.tealAccent, width: 6),
+          top: BorderSide(color: Colors.tealAccent, width: 6),
+        ),
+      ),
+    );
+  }
+}
 // ================== TRANG QUÉT QR ==================
 class QRScanScreen extends StatefulWidget {
   const QRScanScreen({super.key});
@@ -1602,7 +1888,7 @@ class _ImageManagerScreenState extends State<ImageManagerScreen> with SingleTick
     return Scaffold(
       appBar: AppBar(
         title: const Text('Thiết lập: Ảnh & QR'),
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: const Color.fromARGB(255, 58, 183, 93),
         foregroundColor: Colors.white,
         bottom: TabBar(
           controller: _tabController,
@@ -1822,7 +2108,7 @@ class _InventoryImageManagerState extends State<InventoryImageManager> {
                 onPressed: _loadInventory,
                 icon: const Icon(Icons.refresh),
                 label: const Text('Làm mới'),
-                style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 133, 100, 191)),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 78, 9, 197)),
               ),
             ],
           ),
@@ -1889,7 +2175,7 @@ class _InventoryImageManagerState extends State<InventoryImageManager> {
                                       onPressed: () => _showQRDialog(ivcode, iname, vend),
                                       icon: const Icon(Icons.qr_code, size: 18),
                                       label: const Text('QR'),
-                                      style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 223, 186, 131), foregroundColor: Colors.white, minimumSize: const Size(100, 40)),
+                                      style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 131, 182, 223), foregroundColor: Colors.white, minimumSize: const Size(100, 40)),
                                     ),
                                   ],
                                 ),
@@ -1907,7 +2193,7 @@ class _InventoryImageManagerState extends State<InventoryImageManager> {
             icon: const Icon(Icons.qr_code_2, size: 28),
             label: const Text('Tạo QR hàng loạt', style: TextStyle(fontSize: 18)),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color.fromARGB(255, 129, 90, 195),
+              backgroundColor: const Color.fromARGB(255, 93, 18, 224),
               foregroundColor: Colors.white,
               minimumSize: const Size.fromHeight(60),
             ),
@@ -2893,21 +3179,59 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
 
   String selectedLocation = '';
   List<Map<String, String>> locations = [];
-
+  List<Map<String, String>> uniqueLocations = [];
   String get baseUrl => AppConfig.baseUrl;
+  final TextEditingController _assetCodeController = TextEditingController();
+ // final TextEditingController _locationCodeController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadAssets();
+    loadUniqueLocations();  // ← Đổi tên và gọi ở đây
     _loadLocations();
   }
+Future<void> loadUniqueLocations() async {
+  if (baseUrl.isEmpty) return;
 
+  try {
+    final url = '$baseUrl/api/asset-physical/get';
+    final response = await http.get(Uri.parse(url));
+
+    if (response.statusCode == 200) {
+      final List<dynamic> rawData = jsonDecode(response.body);
+
+      final Map<String, String> locMap = {};
+
+      for (var item in rawData) {
+        final code = (item['LocationCode'] ?? '').toString().trim();
+        String name = (item['LocationName'] ?? 'Không tên').toString().trim(); // ← Dùng trường mới
+
+        if (code.isNotEmpty) {
+          if (!locMap.containsKey(code) || (locMap[code] == 'Không tên' && name != 'Không tên')) {
+            locMap[code] = name;
+          }
+        }
+      }
+
+      uniqueLocations = locMap.entries.map((e) => {
+        'code': e.key,
+        'name': e.value,
+      }).toList()
+        ..sort((a, b) => a['code']!.compareTo(b['code']!));
+
+      setState(() {});
+    }
+  } catch (e) {
+    print('Lỗi tải location: $e');
+  }
+}
   Future<void> _loadAssets() async {
   if (baseUrl.isEmpty) {
     EasyLoading.showError('Chưa đăng nhập');
     return;
   }
+  
 
   setState(() => _isLoading = true);
   EasyLoading.show(status: 'Đang tải danh sách tài sản...');
@@ -3164,14 +3488,112 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
 
 @override
 Widget build(BuildContext context) {
+  print('AssetPhysicalTab build - _isScanning: $_isScanning'); // Debug
+
   return Column(
     children: [
-      // Phần trên ~30%: Quét QR + hướng dẫn
-      Expanded(
-        flex: 3,  // ≈ 30%
+      // === PHẦN TÌM KIẾM (giống AssetCheckScreen) - luôn ở đầu ===
+  Padding(
+  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+  child: Column(
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _assetCodeController,
+              decoration: InputDecoration(
+                labelText: 'Mã TS/CCDC (AssetClassName)',
+                hintText: 'VD: TSCD001, PC-001...',
+                prefixIcon: const Icon(Icons.qr_code_2, color: Colors.deepPurple),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                filled: true,
+                fillColor: Colors.grey[100],
+              ),
+              onSubmitted: (_) => _loadAssets(),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              initialValue: selectedLocation.isEmpty ? null : selectedLocation, // ← Sửa deprecated: dùng initialValue
+              hint: const Text('Chọn vị trí'),
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'Vị trí (LocationCode)',
+                hintStyle: const TextStyle(color: Colors.grey),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                filled: true,
+                fillColor: Colors.grey[100],
+                prefixIcon: const Icon(Icons.location_on, color: Colors.deepPurple),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              ),
+              items: uniqueLocations.isEmpty
+                  ? [const DropdownMenuItem(value: null, child: Text('Đang tải...'))]
+                  : uniqueLocations.map((loc) {
+                      // Sửa null safety: check loc['name'] trước khi truy cập .isNotEmpty
+                      final name = loc['name'] ?? 'Không tên';
+                      final display = name != 'Không tên' && name.isNotEmpty
+                          ? '${loc['code'] ?? ''} - $name'
+                          : (loc['code'] ?? 'Không mã');
+
+                      return DropdownMenuItem<String>(
+                        value: loc['code'] ?? '', // ← Dùng ?? '' để tránh null
+                        child: Text(
+                          display,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      );
+                    }).toList(),
+              onChanged: (value) {
+                setState(() {
+                  selectedLocation = value ?? '';
+                });
+                _loadAssets(); // Tự động tìm kiếm khi chọn
+              },
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 12),
+      Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.search),
+              label: const Text('Tìm kiếm'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepPurple,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+              ),
+              onPressed: _isLoading ? null : _loadAssets,
+            ),
+          ),
+          const SizedBox(width: 12),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.deepPurple),
+            tooltip: 'Tải lại toàn bộ',
+            onPressed: () {
+              _assetCodeController.clear();
+              setState(() => selectedLocation = ''); // Xóa filter vị trí
+              _loadAssets();
+            },
+          ),
+        ],
+      ),
+    ],
+  ),
+),
+      // === PHẦN CAMERA - đẩy xuống dưới, giới hạn chiều cao ===
+      SizedBox(
+        height: MediaQuery.of(context).size.height * 0.20, // 50% màn hình - điều chỉnh nếu cần (0.45 ~ 0.55)
         child: Stack(
+          fit: StackFit.expand,
           children: [
-            // Camera preview khi đang quét
+            // Camera khi quét
             if (_isScanning)
               MobileScanner(
                 controller: cameraController,
@@ -3182,76 +3604,73 @@ Widget build(BuildContext context) {
                     _processScan(qr);
                   }
                 },
-              )
-            else
-              // Màn hình chờ quét (khi chưa bật camera)
+              ),
+
+            // Khi không quét: nền sáng + nút bật
+            if (!_isScanning)
               Container(
-                color: Colors.black87,
+                color: Colors.grey.shade100,
                 child: Center(
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const Icon(
-                        Icons.qr_code_scanner_rounded,
-                        size: 120,
-                        color: Colors.tealAccent,
+                        Icons.camera_alt_rounded,
+                        size: 80,
+                        color: Color.fromARGB(255, 58, 183, 139),
                       ),
                       const SizedBox(height: 24),
-                      const Text(
-                        'Sẵn sàng quét QR TSCD/CCDC',
-                        style: TextStyle(
-                          fontSize: 22,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Đưa mã QR vào khung hình để bắt đầu kiểm kê',
-                        style: TextStyle(fontSize: 16, color: Colors.white70),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 32),
                       ElevatedButton.icon(
-                        icon: const Icon(Icons.qr_code_scanner, size: 28),
-                        label: const Text('BẬT QUÉT QR', style: TextStyle(fontSize: 18)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.deepPurple.shade700,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        icon: const Icon(Icons.qr_code_scanner),
+                        label: const Text(
+                          'BẬT QUÉT QR',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
-                        onPressed: () => setState(() {
-                          _isScanning = true;
-                          _scanMessage = null;
-                        }),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color.fromARGB(255, 45, 156, 168),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
+                          elevation: 8,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _isScanning = true;
+                            _scanMessage = null;
+                          });
+                        },
                       ),
                     ],
                   ),
                 ),
               ),
 
-            // Thông báo trạng thái (loading, lỗi, thành công...)
-            if (_isLoading)
-              const Center(child: CircularProgressIndicator(color: Colors.white, strokeWidth: 6))
-            else if (_scanMessage != null)
+            // Nút đóng
+            if (_isScanning)
+              Positioned(
+                top: 40,
+                right: 16,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 40),
+                  onPressed: () => setState(() => _isScanning = false),
+                ),
+              ),
+
+            // Thông báo
+            if (_scanMessage != null)
               Positioned(
                 bottom: 40,
-                left: 20,
-                right: 20,
+                left: 24,
+                right: 24,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
                   decoration: BoxDecoration(
-                    color: Colors.black.withAlpha((0.75 * 255).round()),
+                    color: Colors.black.withValues(alpha: 0.7),
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: Text(
                     _scanMessage!,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -3260,9 +3679,8 @@ Widget build(BuildContext context) {
         ),
       ),
 
-      // Phần dưới ~70%: Danh sách tài sản + nhập Vphis
+      // === DANH SÁCH TÀI SẢN - chiếm hết phần còn lại ===
       Expanded(
-        flex: 7,  // ≈ 70%
         child: Container(
           decoration: BoxDecoration(
             color: Colors.grey.shade50,
@@ -3270,7 +3688,7 @@ Widget build(BuildContext context) {
           ),
           child: Column(
             children: [
-              // Header danh sách
+              // Header + refresh
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 child: Row(
@@ -3288,33 +3706,33 @@ Widget build(BuildContext context) {
                 ),
               ),
 
-              // Dropdown lọc vị trí (nếu bạn đã có logic _loadLocations)
+              // Dropdown vị trí (nếu có)
               if (locations.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: DropdownButtonFormField<String>(
                     initialValue: selectedLocation.isEmpty ? null : selectedLocation,
-                    hint: const Text('Tất cả vị trí'),
+                    hint: const Text('Chọn vị trí'),
                     isExpanded: true,
                     decoration: InputDecoration(
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     ),
-                    items: [
-                      const DropdownMenuItem(value: '', child: Text('Tất cả')),
-                      ...locations.map((loc) => DropdownMenuItem(
-                            value: loc['code'] ?? '',
-                            child: Text('${loc['code']} - ${loc['name']}'),
-                          )),
-                    ],
+                    items: locations.map((loc) {
+                      return DropdownMenuItem<String>(
+                        value: loc['code'] ?? '',
+                        child: Text('${loc['code']} - ${loc['name']}'),
+                      );
+                    }).toList(),
                     onChanged: (val) {
-                      setState(() => selectedLocation = val ?? '');
-                      _loadAssets();
+                      setState(() {
+                        selectedLocation = val ?? '';
+                        _loadAssets();
+                      });
                     },
                   ),
                 ),
 
-              // Danh sách cuộn
+              // Danh sách
               Expanded(
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
@@ -3335,6 +3753,7 @@ Widget build(BuildContext context) {
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             itemCount: assets.length,
                             itemBuilder: (context, index) {
+                              // Giữ nguyên code hiển thị mỗi item của bạn
                               final item = assets[index];
                               final code = item['AssetClassCode'] ?? '';
                               final name = item['AssetClassName'] ?? 'Không tên';
@@ -3343,7 +3762,6 @@ Widget build(BuildContext context) {
                               final slvgQty = item['SlvgQty'] ?? '0';
                               final phisUser = item['PhisUser'] ?? 'Chưa có';
                               final vphisCtrl = vphisControllers[index];
-
                               final parsedVphis = double.tryParse(vphisCtrl.text.replaceAll(',', '.')) ?? 0.0;
                               final qtyColor = parsedVphis > 0 ? Colors.green.shade700 : Colors.red.shade700;
 
@@ -3389,7 +3807,7 @@ Widget build(BuildContext context) {
                                         ],
                                       ),
                                       const Divider(height: 24),
-                                      Text('Vị trí: $loc  •  Phòng ban: $dept'),
+                                      Text('Vị trí: $loc • Phòng ban: $dept'),
                                       const SizedBox(height: 4),
                                       Text('Người dùng: $phisUser', style: const TextStyle(color: Colors.blueGrey)),
                                       Text(
@@ -3451,8 +3869,10 @@ void dispose() {
   }
   
   super.dispose();
+  
 }
 }
+
 // Thêm class GameScreen này vào cuối file (trước dấu } cuối cùng của file)
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});

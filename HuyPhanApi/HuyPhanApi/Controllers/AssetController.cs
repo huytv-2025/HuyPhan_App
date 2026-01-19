@@ -20,79 +20,81 @@ namespace HuyPhanApi.Controllers
         public AssetPhysicalController(IConfiguration configuration, FcmService? fcmService = null)
         {
             _connectionString = configuration.GetConnectionString("Default")
-                ?? "Server=.;Database=SMILE_BO;User Id=Smile;Password=AnhMinh167TruongDinh;TrustServerCertificate=True;";
+                ?? throw new InvalidOperationException("Không tìm thấy connection string 'Default' trong configuration.");
+
             _fcmService = fcmService;
         }
 
-        // GET: api/asset-physical/get
-        [HttpGet("get")]
-        public async Task<IActionResult> GetAssetPhysical(
-            [FromQuery] string? assetClassName = null,
-            [FromQuery] string? locationCode = null)
+            // GET: api/asset-physical/get
+           [HttpGet("get")]
+public async Task<IActionResult> GetAssetPhysical(
+    [FromQuery] string? assetClassName = null,
+    [FromQuery] string? locationCode = null)
+{
+    try
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        var sql = @"
+            SET NOCOUNT ON;
+            SELECT 
+                a.AssetClassCode,
+                LTRIM(RTRIM(a.AssetClassName)) AS AssetClassName,
+                LTRIM(RTRIM(a.DepartmentCode)) AS DepartmentCode,
+                LTRIM(RTRIM(a.LocationCode)) AS LocationCode,
+                dbo.fTCVNToUnicode(d.RVCName) AS LocationName, 
+                ISNULL(a.SlvgQty, 0) AS SlvgQty,
+                LTRIM(RTRIM(a.PhisLoc)) AS PhisLoc,
+                LTRIM(RTRIM(a.PhisUser)) AS PhisUser
+            FROM AssetItem a
+            LEFT JOIN DefRVCList d ON a.LocationCode = d.RVCNo   -- ← Join bảng DeftRVC theo mã vị trí
+            WHERE 1 = 1";
+
+        if (!string.IsNullOrWhiteSpace(assetClassName))
+            sql += " AND a.AssetClassName LIKE @AssetClassName";
+
+        if (!string.IsNullOrWhiteSpace(locationCode))
+            sql += " AND a.LocationCode = @LocationCode";
+
+        sql += " ORDER BY a.AssetClassName, a.AssetClassCode";
+
+        await using var command = new SqlCommand(sql, connection);
+
+        if (!string.IsNullOrWhiteSpace(assetClassName))
+            command.Parameters.AddWithValue("@AssetClassName", "%" + assetClassName.Trim() + "%");
+
+        if (!string.IsNullOrWhiteSpace(locationCode))
+            command.Parameters.AddWithValue("@LocationCode", locationCode.Trim());
+
+        await using var reader = await command.ExecuteReaderAsync();
+
+        var results = new List<Dictionary<string, object>>();
+
+        while (await reader.ReadAsync())
         {
-            try
+            results.Add(new Dictionary<string, object>
             {
-                await using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
-
-                var sql = @"
-                    SET NOCOUNT ON;
-                    SELECT 
-                        a.AssetClassCode,
-                        LTRIM(RTRIM(a.AssetClassName)) AS AssetClassName,
-                        LTRIM(RTRIM(a.DepartmentCode)) AS DepartmentCode,
-                        LTRIM(RTRIM(a.LocationCode)) AS LocationCode,
-                        ISNULL(a.SlvgQty, 0) AS SlvgQty,
-                        LTRIM(RTRIM(a.PhisLoc)) AS PhisLoc,
-                        LTRIM(RTRIM(a.PhisUser)) AS PhisUser
-                    FROM AssetItem a
-                    WHERE 1 = 1";
-
-                if (!string.IsNullOrWhiteSpace(assetClassName))
-                    sql += " AND a.AssetClassName LIKE @AssetClassName";
-
-                if (!string.IsNullOrWhiteSpace(locationCode))
-                    sql += " AND a.LocationCode = @LocationCode";
-
-                sql += " ORDER BY a.AssetClassName, a.AssetClassCode";
-
-                await using var command = new SqlCommand(sql, connection);
-
-                if (!string.IsNullOrWhiteSpace(assetClassName))
-                    command.Parameters.AddWithValue("@AssetClassName", "%" + assetClassName.Trim() + "%");
-
-                if (!string.IsNullOrWhiteSpace(locationCode))
-                    command.Parameters.AddWithValue("@LocationCode", locationCode.Trim());
-
-                await using var reader = await command.ExecuteReaderAsync();
-
-                var results = new List<Dictionary<string, object>>();
-
-                while (await reader.ReadAsync())
-                {
-                    results.Add(new Dictionary<string, object>
-                    {
-                        ["AssetClassCode"]  = reader.GetSafeString("AssetClassCode"),
-                        ["AssetClassName"]  = reader.GetSafeString("AssetClassName") ?? "Không tên",
-                        ["DepartmentCode"] = reader.GetSafeString("DepartmentCode"),
-                        ["LocationCode"]   = reader.GetSafeString("LocationCode"),
-                        ["SlvgQty"]        = reader.GetSafeDecimal("SlvgQty"),
-                        ["PhisLoc"]        = reader.GetSafeString("PhisLoc"),
-                        ["PhisUser"]       = reader.GetSafeString("PhisUser")
-                    });
-                }
-
-                Console.WriteLine($"GetAssetPhysical trả về {results.Count} dòng"); // Log debug
-
-                return Ok(results);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Lỗi GetAssetPhysical: {ex.Message}\n{ex.StackTrace}");
-                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
-            }
+                ["AssetClassCode"]  = reader.GetSafeString("AssetClassCode"),
+                ["AssetClassName"]  = reader.GetSafeString("AssetClassName") ?? "Không tên",
+                ["DepartmentCode"] = reader.GetSafeString("DepartmentCode"),
+                ["LocationCode"]   = reader.GetSafeString("LocationCode"),
+                ["LocationName"]   = reader.GetSafeString("LocationName") ?? "Không tên",  // ← Thêm trường này
+                ["SlvgQty"]        = reader.GetSafeDecimal("SlvgQty"),
+                ["PhisLoc"]        = reader.GetSafeString("PhisLoc"),
+                ["PhisUser"]       = reader.GetSafeString("PhisUser")
+            });
         }
 
+        Console.WriteLine($"GetAssetPhysical trả về {results.Count} dòng");
+        return Ok(results);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Lỗi GetAssetPhysical: {ex.Message}\n{ex.StackTrace}");
+        return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
+    }
+}
         // POST: api/asset-physical/save
         [HttpPost("save")]
         public async Task<IActionResult> SaveAssetPhysical([FromBody] SaveAssetPhysicalRequest request)
