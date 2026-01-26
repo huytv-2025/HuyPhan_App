@@ -7,8 +7,11 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:math' as math;
+
 import 'dart:async';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 
 
@@ -33,19 +36,77 @@ void main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'HuyPhan',
-      theme: ThemeData(
-        primarySwatch: Colors.teal,
-        fontFamily: 'Roboto',
+ @override
+Widget build(BuildContext context) {
+  return MaterialApp(
+    title: 'HuyPhan',
+    debugShowCheckedModeBanner: false,
+    theme: ThemeData(
+      // ───────────────────────── Đổi sang BLUE để màu xanh dương hoạt động ─────────────────────────
+      primarySwatch: Colors.blue,          // ← Quan trọng nhất: đổi từ teal sang blue
+      primaryColor: const Color(0xFF1976D2), // Blue 700 - xanh dương đậm đẹp
+      // ───────────────────────────────────────────────────────────────────────────────────────────────
+
+      fontFamily: 'Roboto',
+      scaffoldBackgroundColor: Colors.grey[50],
+      colorScheme: ColorScheme.fromSwatch(
+        primarySwatch: Colors.blue,        // ← Đồng bộ blue
+        accentColor: Colors.blueAccent,
+        brightness: Brightness.light,
       ),
-      home: const LoginScreen(),
-      debugShowCheckedModeBanner: false,
-      builder: EasyLoading.init(),
-    );
-  }
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF1565C0), // Blue 800 cho nút
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
+          elevation: 4,
+        ),
+      ),
+      textTheme: const TextTheme(
+        bodyLarge: TextStyle(fontSize: 16, color: Colors.black87),
+        titleLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+      ),
+      cardTheme: CardThemeData(
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+
+      // ───────────────────────── BOTTOM NAVIGATION BAR ─────────────────────────
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: Colors.white,
+        selectedItemColor: const Color(0xFF1976D2),     // ← Xanh dương đậm khi chọn
+        unselectedItemColor: Colors.grey[600],
+        selectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 13,
+        ),
+        unselectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.normal,
+          fontSize: 12,
+        ),
+        type: BottomNavigationBarType.fixed,
+        showUnselectedLabels: true,
+        elevation: 8,
+
+        // Làm icon to hơn + nổi bật khi chọn
+        selectedIconTheme: const IconThemeData(
+          size: 28,
+          color: Color(0xFF1976D2),
+        ),
+        unselectedIconTheme: const IconThemeData(
+          size: 24,
+          color: Color(0xFF9E9E9E),
+        ),
+      ),
+      // ────────────────────────────────────────────────────────────────────────
+    ),
+    home: const LoginScreen(),
+    builder: EasyLoading.init(),
+  );
+}
 }
 
 String buildImageUrl(String? imagePath) {
@@ -67,7 +128,6 @@ String buildImageUrl(String? imagePath) {
 // ================== TRANG ĐĂNG NHẬP ==================
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
-
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -75,8 +135,10 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _clerkIdController = TextEditingController();
   final _securityCodeController = TextEditingController();
-  final _ipController = TextEditingController(text: 'https://overtimidly-ungoggled-isaura.ngrok-free.dev');
+  final _ipController = TextEditingController();
   final _portController = TextEditingController();
+
+  bool _saveServerInfo = true; // Checkbox "Lưu thông tin server"
   String _errorMessage = '';
   bool _isLoading = false;
   late String apiUrl;
@@ -84,15 +146,58 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _updateApiUrl();
+    _loadSavedLoginInfo(); // Tự động load toàn bộ thông tin đã lưu
     _ipController.addListener(_updateApiUrl);
     _portController.addListener(_updateApiUrl);
+  }
+
+  // Load toàn bộ thông tin đã lưu từ SharedPreferences
+  Future<void> _loadSavedLoginInfo() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final savedIp = prefs.getString('saved_ip') ?? 'https://overtimidly-ungoggled-isaura.ngrok-free.dev';
+    final savedPort = prefs.getString('saved_port') ?? '';
+    final savedClerkId = prefs.getString('saved_clerk_id') ?? '';
+    final savedSecurityCode = prefs.getString('saved_security_code') ?? '';
+    final saveServer = prefs.getBool('save_server_info') ?? true;
+
+    setState(() {
+      _ipController.text = savedIp;
+      _portController.text = savedPort;
+      _clerkIdController.text = savedClerkId;
+      _securityCodeController.text = savedSecurityCode;
+      _saveServerInfo = saveServer;
+    });
+
+    _updateApiUrl(); // Cập nhật apiUrl ngay sau khi load
+  }
+
+  // Lưu toàn bộ thông tin nếu checkbox được chọn
+  Future<void> _persistLoginInfo() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (_saveServerInfo) {
+      // Lưu tất cả
+      await prefs.setString('saved_ip', _ipController.text.trim());
+      await prefs.setString('saved_port', _portController.text.trim());
+      await prefs.setString('saved_clerk_id', _clerkIdController.text.trim());
+      await prefs.setString('saved_security_code', _securityCodeController.text.trim());
+      await prefs.setBool('save_server_info', true);
+    } else {
+      // Xóa toàn bộ nếu bỏ check
+      await prefs.remove('saved_ip');
+      await prefs.remove('saved_port');
+      await prefs.remove('saved_clerk_id');
+      await prefs.remove('saved_security_code');
+      await prefs.setBool('save_server_info', false);
+    }
   }
 
   void _updateApiUrl() {
     final ip = _ipController.text.trim();
     final portText = _portController.text.trim();
     if (ip.isEmpty) return;
+
     String base;
     if (ip.startsWith('http://') || ip.startsWith('https://')) {
       base = ip;
@@ -116,61 +221,60 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
-  _updateApiUrl();
-  setState(() {
-    _isLoading = true;
-    _errorMessage = '';
-  });
-
-  final clerkId = _clerkIdController.text.trim();
-  final securityCode = _securityCodeController.text;
-
-  if (clerkId.isEmpty || securityCode.isEmpty) {
+    _updateApiUrl();
     setState(() {
-      _errorMessage = 'Vui lòng nhập đầy đủ ClerkID và Security Code';
-      _isLoading = false;
+      _isLoading = true;
+      _errorMessage = '';
     });
-    return;
-  }
 
-  try {
-    final response = await http.post(
-      Uri.parse(apiUrl),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'ClerkID': clerkId,
-        'SecurityCode': securityCode,
-      }),
-    ).timeout(const Duration(seconds: 15));
+    final clerkId = _clerkIdController.text.trim();
+    final securityCode = _securityCodeController.text;
 
-    final data = jsonDecode(response.body);
-
-    if (response.statusCode == 200 && data['success'] == true) {
-      // Đảm bảo baseUrl đã được set (gọi lại để chắc chắn)
-      _updateApiUrl();
-    
-      if (!mounted) return;  // Tránh dùng context khi widget đã dispose
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const MainMenuScreen()),
-      );
-    } else {
+    if (clerkId.isEmpty || securityCode.isEmpty) {
       setState(() {
-        _errorMessage = data['message'] ?? 'Đăng nhập thất bại';
+        _errorMessage = 'Vui lòng nhập đầy đủ ClerkID và Security Code';
+        _isLoading = false;
       });
+      return;
     }
-  } catch (e) {
-    setState(() {
-      _errorMessage = 'Lỗi kết nối: $e';
-    });
-  } finally {
-    if (mounted) {  // Chỉ setState nếu widget còn sống
-      setState(() => _isLoading = false);
+
+    try {
+      final response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'ClerkID': clerkId,
+          'SecurityCode': securityCode,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        // Lưu toàn bộ thông tin (hoặc xóa nếu bỏ check)
+        await _persistLoginInfo();
+
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const MainMenuScreen()),
+        );
+      } else {
+        setState(() {
+          _errorMessage = data['message'] ?? 'Đăng nhập thất bại';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Lỗi kết nối: $e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
-}
-      
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -182,7 +286,7 @@ class _LoginScreenState extends State<LoginScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFE0F7FA), // xanh nhạt
+              Color(0xFFE0F7FA),
               Color(0xFFB2EBF2),
               Color(0xFF80DEEA),
             ],
@@ -195,7 +299,7 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Avatar tròn + hiệu ứng nổi nhẹ (bỏ viền trắng dày)
+                  // Avatar + tiêu đề (giữ nguyên)
                   Container(
                     width: 120,
                     height: 120,
@@ -224,10 +328,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 32),
-
-                  // Tiêu đề
                   const Text(
                     'Huy Phan',
                     style: TextStyle(
@@ -246,41 +347,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-
                   const SizedBox(height: 40),
 
-                  // Nút chơi game đặc biệt (giữ nguyên)
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const GameScreen()),
-                        );
-                      },
-                      icon: const Icon(Icons.sports_soccer, size: 15),
-                      label: const Text(
-                        '🎮 Chơi Ném Bóng Vào Ly Để Vào App!',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color.fromARGB(255, 0, 157, 255),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                        elevation: 8,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 35),
-
-                  // Card chứa form đăng nhập - phong cách pngtree
                   Container(
                     width: double.infinity,
-                    constraints: const BoxConstraints(maxWidth: 380),
-                    padding: const EdgeInsets.all(30),
+                    margin: const EdgeInsets.only(bottom: 0),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(28),
@@ -293,41 +365,65 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                     ),
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        // IP + Port (giữ nguyên)
-                        TextField(
-                          controller: _ipController,
-                          decoration: InputDecoration(
-                            labelText: 'IP Server',
-                            hintText: 'Ví dụ: 192.168.1.100',
-                            prefixIcon: const Icon(Icons.computer, color: Colors.teal),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide.none,
-                            ),
-                            filled: true,
-                            fillColor: Colors.grey.shade50,
-                            contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                        // Logo nhỏ
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.teal.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
                           ),
+                          child: const Icon(Icons.qr_code_2_rounded, size: 15, color: Colors.teal),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 14),
 
-                        TextField(
-                          controller: _portController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: 'Port (tùy chọn)',
-                            prefixIcon: const Icon(Icons.settings_ethernet, color: Colors.teal),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide.none,
+                        // IP + Port
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              flex: 7,
+                              child: TextField(
+                                controller: _ipController,
+                                decoration: InputDecoration(
+                                  labelText: 'IP Server',
+                                  hintText: 'Ví dụ: 192.168.1.100',
+                                  prefixIcon: const Icon(Icons.computer, color: Colors.teal),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.grey.shade50,
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                                ),
+                              ),
                             ),
-                            filled: true,
-                            fillColor: Colors.grey.shade50,
-                            contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-                          ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              flex: 3,
+                              child: TextField(
+                                controller: _portController,
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  labelText: 'Port',
+                                  hintText: '5167',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.grey.shade50,
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 8),
+
+                        
 
                         // ClerkID
                         TextField(
@@ -363,8 +459,25 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 32),
+// Checkbox lưu toàn bộ thông tin
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: _saveServerInfo,
+                              onChanged: (value) {
+                                setState(() => _saveServerInfo = value ?? true);
+                              },
+                              activeColor: Colors.teal,
+                            ),
+                            const Text(
+                              'Lưu',
+                              style: TextStyle(fontSize: 14, color: Colors.black87),
+                            ),
+                          ],
+                        ),
 
-                        // Nút Login
+                        const SizedBox(height: 16),
+                        // Nút Đăng nhập
                         SizedBox(
                           width: double.infinity,
                           height: 58,
@@ -388,10 +501,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                           ),
                         ),
-
                         const SizedBox(height: 20),
 
-                        // Error message
                         if (_errorMessage.isNotEmpty)
                           Text(
                             _errorMessage,
@@ -401,7 +512,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 40),
                 ],
               ),
@@ -500,10 +610,11 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     _pages = [
       const HomeScreen(),
       const SaleOrderScreen(),
-      const QRScanScreen(),
+    
+      
+      const PhysicalInventoryScreen(),
       const QRUpdateMenuScreen(),
       const ImageManagerScreen(),
-      const PhysicalInventoryScreen(),
       
     ];
   }
@@ -558,12 +669,13 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
         unselectedItemColor: Colors.grey,
         onTap: _onItemTapped,
         items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Saleorder'),
-          BottomNavigationBarItem(icon: Icon(Icons.qr_code_scanner), label: 'Quét QR'),
-          BottomNavigationBarItem(icon: Icon(Icons.sync), label: 'Cập nhật QR'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Thiết lập'),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Trang chủ'),
+          BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Ảnh'),
+         
+         
           BottomNavigationBarItem(icon: Icon(Icons.inventory_2), label: 'Kiểm kê VL'),
+           BottomNavigationBarItem(icon: Icon(Icons.sync), label: 'Báo cáo'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Thiết lập'),
         ],
       ),
     );
@@ -594,21 +706,66 @@ class _QRUpdateMenuScreenState extends State<QRUpdateMenuScreen> with SingleTick
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Cập nhật QR'),
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          tabs: const [
-            Tab(icon: Icon(Icons.inventory_2), text: 'Hàng hóa'),
-            Tab(icon: Icon(Icons.account_balance), text: 'Tài sản & CCDC'),
-          ],
+Widget build(BuildContext context) {
+  return Scaffold(
+    appBar: AppBar(
+      title: const Text('Báo cáo hàng tồn kho'),
+      centerTitle: true,
+      backgroundColor: const Color.fromARGB(255, 121, 201, 221),
+      foregroundColor: const Color.fromARGB(255, 2, 0, 0),
+      elevation: 0,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh, size: 22),
+          tooltip: 'Tải lại',
+          onPressed: () {}, // Thêm logic reload sau
+        ),
+      ],
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(42.0), // Siêu nhỏ gọn, không overflow
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.45),
+              width: 0.8, // Viền siêu mỏng
+            ),
+          ),
+          child: TabBar(
+            controller: _tabController,
+            indicator: BoxDecoration(
+              color: const Color.fromARGB(255, 255, 255, 255),
+              borderRadius: BorderRadius.circular(22),
+            ),
+            indicatorSize: TabBarIndicatorSize.tab,
+            labelColor: const Color.fromARGB(255, 97, 66, 222),
+            unselectedLabelColor: Colors.black.withValues(alpha: 0.75),
+            labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            unselectedLabelStyle: const TextStyle(fontSize: 12),
+            dividerColor: Colors.transparent,
+            padding: EdgeInsets.zero,
+            tabs: const [
+              Tab(
+                height: 36, // Giới hạn chiều cao tab nhỏ hơn
+                icon: Icon(Icons.inventory_2, size: 16), // Icon nhỏ
+                text: 'Hàng Hóa',
+              ),
+              Tab(
+                height: 36,
+                icon: Icon(Icons.account_balance, size: 16),
+                text: 'TSCĐ',
+              ),
+            ],
+          ),
         ),
       ),
+    ),
       body: TabBarView(
         controller: _tabController,
         children: const [
@@ -746,7 +903,7 @@ class _InventoryCheckScreenState extends State<InventoryCheckScreen> {
               QrImageView(data: qrData, version: QrVersions.auto, size: 250, backgroundColor: Colors.white, errorCorrectionLevel: QrErrorCorrectLevel.H),
               const SizedBox(height: 20),
               Text('Mã hàng: $ivcode', style: const TextStyle(fontWeight: FontWeight.bold)),
-              Text('Tồn kho: $vend cái', style: const TextStyle(color: Colors.green)),
+              Text('Tồn kho: $vend cái', style: const TextStyle(color: Color.fromARGB(255, 97, 66, 222))),
               const SizedBox(height: 10),
               const Text('Quét bằng bất kỳ ứng dụng QR nào', style: TextStyle(fontSize: 14, color: Colors.grey)),
             ],
@@ -809,7 +966,7 @@ String formatCleanQty(dynamic qty) {
                   onPressed: isLoading ? null : _loadInventory,
                   icon: const Icon(Icons.refresh),
                   label: const Text('Làm mới danh sách'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, minimumSize: const Size.fromHeight(50)),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 97, 66, 222), minimumSize: const Size.fromHeight(50)),
                 ),
               ],
             ),
@@ -883,10 +1040,10 @@ String formatCleanQty(dynamic qty) {
           ],
         ),
       ),
-                                
+
                                 DataCell(Text(iname)),
                                 DataCell(Text(item['unit'] ?? 'Cái', style: const TextStyle(color: Colors.indigo, fontWeight: FontWeight.w600))),
-                                DataCell(Text(formatCleanQty(item['Vend']), style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold))),
+                                DataCell(Text(formatCleanQty(item['Vend']), style: const TextStyle(color: Color.fromARGB(255, 94, 76, 175), fontWeight: FontWeight.bold))),
                                 DataCell(Text(item['Vperiod'] ?? '', style: const TextStyle(fontSize: 14))),
                                 DataCell(Text(item['rvc'] ?? '', style: const TextStyle(fontSize: 14))),
                                 DataCell(Text(item['rvcname'] ?? '', style: const TextStyle(fontSize: 14))),
@@ -965,14 +1122,15 @@ class _AssetCheckScreenState extends State<AssetCheckScreen> {
   bool isLoading = false;
   bool _isScanning = false;
   String? _scanMessage;
+
   final MobileScannerController cameraController = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
     facing: CameraFacing.back,
   );
-  List<dynamic> assets = [];
-  // Hai controller riêng cho hai trường tìm kiếm
+
+  // Chỉ giữ 2 controller: Mã TS/CCDC và Mã phòng ban
   final TextEditingController _assetCodeController = TextEditingController();
-  final TextEditingController _locationCodeController = TextEditingController();
+  final TextEditingController _departmentCodeController = TextEditingController();
 
   String get baseUrl => AppConfig.baseUrl;
 
@@ -992,49 +1150,44 @@ class _AssetCheckScreenState extends State<AssetCheckScreen> {
     EasyLoading.show(status: 'Đang tải danh sách tài sản...');
 
     try {
-      // Endpoint chính
-      var url = '$baseUrl/api/asset-physical/get';
+      var url = '$baseUrl/api/asset-phish/get';
 
-      // Xây dựng query parameters
       final queryParams = <String, String>{};
 
+      // Tìm theo Mã TS/CCDC (AssetClassName)
       final assetClassCode = _assetCodeController.text.trim();
       if (assetClassCode.isNotEmpty) {
-        // Tùy backend: có thể là assetCode, assetClassCode, assetItemCode
-        // Giả sử backend hỗ trợ assetCode hoặc assetClassCode
-        queryParams['assetClassCode'] =assetClassCode;           // Hoặc 'assetClassCode'
-        // Nếu backend dùng assetItemCode thì đổi thành: queryParams['assetItemCode'] = assetCode;
+        queryParams['assetClassName'] = assetClassCode;
       }
 
-      final locationCode = _locationCodeController.text.trim();
-      if (locationCode.isNotEmpty) {
-        queryParams['locationCode'] = locationCode;
+      // Tìm theo Mã phòng ban (DepartmentCode)
+      final departmentCode = _departmentCodeController.text.trim();
+      if (departmentCode.isNotEmpty) {
+        queryParams['departmentCode'] = departmentCode;
       }
 
-      // Nếu có tham số thì thêm vào URL
       if (queryParams.isNotEmpty) {
         url += '?${Uri(queryParameters: queryParams).query}';
       }
 
-      print('Gọi API tài sản: $url'); // Debug
+      print('Gọi API tài sản: $url');
 
       final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
-
       print('Status: ${response.statusCode} | Body đầu: ${response.body.substring(0, response.body.length.clamp(0, 300))}...');
 
       if (response.statusCode == 200) {
         final List<dynamic> rawData = jsonDecode(response.body);
         setState(() {
           assetList = rawData.map<Map<String, String>>((item) => {
-            'AssetClassCode': item['AssetClassCode']?.toString().trim() ?? '',
-            'AssetClassName': item['AssetClassName']?.toString().trim() ?? 'Không tên',
-            'DepartmentCode': item['DepartmentCode']?.toString().trim() ?? '',
-            'LocationCode': item['LocationCode']?.toString().trim() ?? '',
-            'SlvgQty': item['SlvgQty']?.toString() ?? '0',
-            'PhisUser': item['PhisUser']?.toString().trim() ?? '',
-            'PhisLoc': item['PhisLoc']?.toString().trim() ?? '',
-            'imagePath': item['imagePath']?.toString().trim() ?? '',
-          }).toList();
+                'AssetClassCode': item['AssetClassCode']?.toString().trim() ?? '',
+                'AssetClassName': item['AssetClassName']?.toString().trim() ?? 'Không tên',
+                'DepartmentCode': item['DepartmentCode']?.toString().trim() ?? '',
+                'LocationCode': item['LocationCode']?.toString().trim() ?? '',
+                'SlvgQty': item['SlvgQty']?.toString() ?? '0',
+                'PhisUser': item['PhisUser']?.toString().trim() ?? '',
+                'PhisLoc': item['PhisLoc']?.toString().trim() ?? '',
+                'imagePath': item['imagePath']?.toString().trim() ?? '',
+              }).toList();
         });
       } else {
         EasyLoading.showError('Lỗi server: ${response.statusCode}');
@@ -1092,267 +1245,260 @@ class _AssetCheckScreenState extends State<AssetCheckScreen> {
     if (decimalPart.isEmpty) return integerPart;
     return '$integerPart.$decimalPart';
   }
-void _processScan(String? code) {
-  if (code == null || code.trim().isEmpty) {
+
+  void _processScan(String? code) {
+    if (code == null || code.trim().isEmpty) {
+      setState(() {
+        _scanMessage = 'Không quét được mã hợp lệ';
+      });
+      return;
+    }
+
+    final String scannedCode = code.trim();
     setState(() {
-      _scanMessage = 'Không quét được mã hợp lệ';
+      _scanMessage = 'Đã quét thành công: $scannedCode\nĐang tìm kiếm...';
+      isLoading = true;
+      _isScanning = false;
     });
-    return;
+
+    _assetCodeController.text = scannedCode;
+    _loadAssets().then((_) {
+      setState(() {
+        _scanMessage = 'Tìm thấy dữ liệu cho mã: $scannedCode';
+        isLoading = false;
+      });
+    }).catchError((e) {
+      setState(() {
+        _scanMessage = 'Lỗi khi tải dữ liệu: $e';
+        isLoading = false;
+      });
+    });
+
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted) setState(() => _scanMessage = null);
+    });
   }
 
-  final String scannedCode = code.trim();
-
-  setState(() {
-    _scanMessage = 'Đã quét thành công: $scannedCode\nĐang tìm kiếm...';
-    isLoading = true;
-    _isScanning = false;  // Tắt camera ngay sau khi quét
-  });
-
-  // Logic xử lý mã quét: tự động điền vào ô tìm kiếm và tải lại danh sách
-  _assetCodeController.text = scannedCode;
-
-  // Gọi hàm tải dữ liệu (đã có sẵn trong code của bạn)
-  _loadAssets().then((_) {
-    setState(() {
-      _scanMessage = 'Tìm thấy dữ liệu cho mã: $scannedCode';
-      isLoading = false;
-    });
-  }).catchError((e) {
-    setState(() {
-      _scanMessage = 'Lỗi khi tải dữ liệu: $e';
-      isLoading = false;
-    });
-  });
-
-  // Tùy chọn: tự động tắt thông báo sau 5 giây
-  Future.delayed(const Duration(seconds: 5), () {
-    if (mounted) {
-      setState(() => _scanMessage = null);
-    }
-  });
-}
- @override
-Widget build(BuildContext context) {
-  return Scaffold(
-    body: Column(
-      children: [
-        // Phần tìm kiếm - giữ nguyên
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _assetCodeController,
-                      decoration: InputDecoration(
-                        labelText: 'Mã TS/CCDC',
-                        hintText: 'VD: TSCD001, PC-001...',
-                        prefixIcon: const Icon(Icons.qr_code_2, color: Colors.deepPurple),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-                        filled: true,
-                        fillColor: Colors.grey[100],
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        children: [
+          // Phần tìm kiếm - ĐÃ BỎ Ô MÃ VỊ TRÍ
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _assetCodeController,
+                        decoration: InputDecoration(
+                          labelText: 'Mã TS/CCDC',
+                          hintText: 'VD: TSCD001, PC-001...',
+                          prefixIcon: const Icon(Icons.qr_code_2, color: Colors.deepPurple),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                          filled: true,
+                          fillColor: Colors.grey[100],
+                        ),
+                        onSubmitted: (_) => _loadAssets(),
                       ),
-                      onSubmitted: (_) => _loadAssets(),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _locationCodeController,
-                      decoration: InputDecoration(
-                        labelText: 'Mã vị trí',
-                        hintText: 'VD: KHO01, P.KE TOAN...',
-                        prefixIcon: const Icon(Icons.location_on, color: Colors.deepPurple),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-                        filled: true,
-                        fillColor: Colors.grey[100],
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _departmentCodeController,
+                        decoration: InputDecoration(
+                          labelText: 'Mã phòng ban',
+                          hintText: 'VD: PB01, KE TOAN...',
+                          prefixIcon: const Icon(Icons.business, color: Colors.deepPurple),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                          filled: true,
+                          fillColor: Colors.grey[100],
+                        ),
+                        onSubmitted: (_) => _loadAssets(),
                       ),
-                      onSubmitted: (_) => _loadAssets(),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.search),
-                      label: const Text('Tìm kiếm'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurple,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.search),
+                        label: const Text('Tìm kiếm'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.deepPurple,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        ),
+                        onPressed: isLoading ? null : _loadAssets,
                       ),
-                      onPressed: isLoading ? null : _loadAssets,
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  IconButton(
-                    icon: const Icon(Icons.refresh, color: Colors.deepPurple),
-                    tooltip: 'Tải lại toàn bộ',
-                    onPressed: () {
-                      _assetCodeController.clear();
-                      _locationCodeController.clear();
-                      _loadAssets();
-                    },
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: 12),
+                    IconButton(
+                      icon: const Icon(Icons.refresh, color: Colors.deepPurple),
+                      tooltip: 'Tải lại toàn bộ',
+                      onPressed: () {
+                        _assetCodeController.clear();
+                        _departmentCodeController.clear();
+                        _loadAssets();
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
 
-        // Phần chính: camera hoặc danh sách
-        Expanded(
-          child: isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _isScanning
-                  ? Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        // Camera thuần túy, không overlay đen, không khung QR
-                        MobileScanner(
-                          controller: cameraController,
-                          onDetect: (capture) {
-                            final qr = capture.barcodes.firstOrNull?.rawValue;
-                            if (qr != null && _isScanning) {
-                              setState(() => _isScanning = false);
-                              _processScan(qr);
-                            }
-                          },
-                        ),
-
-                        // Nút đóng (close) ở góc trên phải
-                        Positioned(
-                          top: 16,
-                          right: 16,
-                          child: IconButton(
-                            icon: const Icon(Icons.close, color: Colors.white, size: 40),
-                            onPressed: () => setState(() => _isScanning = false),
+          // Phần camera + danh sách (giữ nguyên)
+          Expanded(
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _isScanning
+                    ? Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          MobileScanner(
+                            controller: cameraController,
+                            onDetect: (capture) {
+                              final qr = capture.barcodes.firstOrNull?.rawValue;
+                              if (qr != null && _isScanning) {
+                                setState(() => _isScanning = false);
+                                _processScan(qr);
+                              }
+                            },
                           ),
-                        ),
-
-                        // (Tùy chọn) Thông báo quét nếu có
-                        if (_scanMessage != null)
                           Positioned(
-                            bottom: 40,
-                            left: 24,
-                            right: 24,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.7),
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                              child: Text(
-                                _scanMessage!,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
+                            top: 16,
+                            right: 16,
+                            child: IconButton(
+                              icon: const Icon(Icons.close, color: Colors.white, size: 40),
+                              onPressed: () => setState(() => _isScanning = false),
                             ),
                           ),
-                      ],
-                    )
-                  : assetList.isEmpty
-                      ? const Center(child: Text('Không có dữ liệu', style: TextStyle(fontSize: 18)))
-                      : SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: DataTable(
-                            headingRowColor: WidgetStateProperty.all(Colors.deepPurple.shade50),
-                            dataRowMinHeight: 80,
-                            dataRowMaxHeight: 100,
-                            columns: const [
-                              DataColumn(label: Text('Mã TS/CCDC', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Tên tài sản', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Phòng ban', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Vị trí', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Số lượng', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Người dùng', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('QR', style: TextStyle(fontWeight: FontWeight.bold))),
-                            ],
-                            rows: assetList.map((item) {
-                              final String code = item['AssetClassCode'] ?? '';
-                              final String name = item['AssetClassName'] ?? '';
-                              final String qty = item['SlvgQty'] ?? '0';
-                              final String dept = item['DepartmentCode'] ?? '';
-                              final String loc = item['LocationCode'] ?? item['PhisLoc'] ?? '';
-                              final String user = item['PhisUser'] ?? '';
-                              return DataRow(
-                                cells: [
-                                  DataCell(Text(code, style: const TextStyle(fontWeight: FontWeight.w600))),
-                                  DataCell(Text(name)),
-                                  DataCell(Text(dept)),
-                                  DataCell(Text(loc)),
-                                  DataCell(Text(formatCleanQty(qty), style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold))),
-                                  DataCell(Text(user)),
-                                  DataCell(
-                                    GestureDetector(
-                                      onTap: () => _showQRDialog(code, name, qty),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                        decoration: BoxDecoration(
-                                          color: Colors.deepPurple.shade100,
-                                          borderRadius: BorderRadius.circular(20),
-                                          border: Border.all(color: Colors.deepPurple),
-                                        ),
-                                        child: const Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.qr_code_scanner, color: Color.fromARGB(255, 141, 105, 202), size: 20),
-                                            SizedBox(width: 8),
-                                            Text('Xem QR', style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold)),
-                                          ],
+                          if (_scanMessage != null)
+                            Positioned(
+                              bottom: 40,
+                              left: 24,
+                              right: 24,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha:0.7),
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                                child: Text(
+                                  _scanMessage!,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                        ],
+                      )
+                    : assetList.isEmpty
+                        ? const Center(child: Text('Không có dữ liệu', style: TextStyle(fontSize: 18)))
+                        : SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: DataTable(
+                              headingRowColor: WidgetStateProperty.all(Colors.deepPurple.shade50),
+                              dataRowMinHeight: 80,
+                              dataRowMaxHeight: 100,
+                              columns: const [
+                                DataColumn(label: Text('Mã TS/CCDC', style: TextStyle(fontWeight: FontWeight.bold))),
+                                DataColumn(label: Text('Tên tài sản', style: TextStyle(fontWeight: FontWeight.bold))),
+                                DataColumn(label: Text('Phòng ban', style: TextStyle(fontWeight: FontWeight.bold))),
+                                DataColumn(label: Text('Vị trí', style: TextStyle(fontWeight: FontWeight.bold))),
+                                DataColumn(label: Text('Số lượng', style: TextStyle(fontWeight: FontWeight.bold))),
+                                DataColumn(label: Text('Người dùng', style: TextStyle(fontWeight: FontWeight.bold))),
+                                DataColumn(label: Text('QR', style: TextStyle(fontWeight: FontWeight.bold))),
+                              ],
+                              rows: assetList.map((item) {
+                                final String code = item['AssetClassCode'] ?? '';
+                                final String name = item['AssetClassName'] ?? '';
+                                final String qty = item['SlvgQty'] ?? '0';
+                                final String dept = item['DepartmentCode'] ?? '';
+                                final String loc = item['LocationCode'] ?? item['PhisLoc'] ?? '';
+                                final String user = item['PhisUser'] ?? '';
+                                return DataRow(
+                                  cells: [
+                                    DataCell(Text(code, style: const TextStyle(fontWeight: FontWeight.w600))),
+                                    DataCell(Text(name)),
+                                    DataCell(Text(dept)),
+                                    DataCell(Text(loc)),
+                                    DataCell(Text(formatCleanQty(qty), style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold))),
+                                    DataCell(Text(user)),
+                                    DataCell(
+                                      GestureDetector(
+                                        onTap: () => _showQRDialog(code, name, qty),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                          decoration: BoxDecoration(
+                                            color: Colors.deepPurple.shade100,
+                                            borderRadius: BorderRadius.circular(20),
+                                            border: Border.all(color: Colors.deepPurple),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.qr_code_scanner, color: Color.fromARGB(255, 141, 105, 202), size: 20),
+                                              SizedBox(width: 8),
+                                              Text('Xem QR', style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold)),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
                           ),
-                        ),
-        ),
+          ),
 
-        // Nút bật camera - chỉ hiển thị khi KHÔNG đang quét
-        if (!_isScanning)
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Align(
-              alignment: Alignment.bottomRight,
-              child: FloatingActionButton.extended(
-                onPressed: () {
-                  setState(() {
-                    _isScanning = true;
-                    _scanMessage = null;
-                  });
-                },
-                backgroundColor: Colors.deepPurple.shade700,
-                icon: const Icon(Icons.camera_alt),
-                label: const Text('Bật Camera'),
+          if (!_isScanning)
+            Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Align(
+                alignment: Alignment.bottomRight,
+                child: FloatingActionButton.extended(
+                  onPressed: () {
+                    setState(() {
+                      _isScanning = true;
+                      _scanMessage = null;
+                    });
+                  },
+                  backgroundColor: Colors.deepPurple.shade700,
+                  icon: const Icon(Icons.camera_alt),
+                  label: const Text('Bật Camera'),
+                ),
               ),
             ),
-          ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _assetCodeController.dispose();
-    _locationCodeController.dispose();
-    _scanMessage = null;
+    _departmentCodeController.dispose();
+    cameraController.dispose();
     super.dispose();
   }
 }
-
 class QRScannerOverlay extends StatelessWidget {
   const QRScannerOverlay({super.key});
 
@@ -1884,21 +2030,66 @@ class _ImageManagerScreenState extends State<ImageManagerScreen> with SingleTick
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Thiết lập: Ảnh & QR'),
-        backgroundColor: const Color.fromARGB(255, 58, 183, 93),
-        foregroundColor: Colors.white,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          tabs: const [
-            Tab(icon: Icon(Icons.inventory_2), text: 'Hàng hóa'),
-            Tab(icon: Icon(Icons.account_balance), text: 'Tài sản & CCDC'),
-          ],
+Widget build(BuildContext context) {
+  return Scaffold(
+    appBar: AppBar(
+      title: const Text('Thiết lập: Hình Ảnh và QR'),
+      centerTitle: true,
+      backgroundColor: const Color.fromARGB(255, 121, 121, 221),
+      foregroundColor: const Color.fromARGB(255, 2, 0, 0),
+      elevation: 0,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh, size: 22),
+          tooltip: 'Tải lại',
+          onPressed: () {}, // Thêm logic reload sau
+        ),
+      ],
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(42.0), // Siêu nhỏ gọn, không overflow
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.45),
+              width: 0.8, // Viền siêu mỏng
+            ),
+          ),
+          child: TabBar(
+            controller: _tabController,
+            indicator: BoxDecoration(
+              color: const Color.fromARGB(255, 255, 255, 255),
+              borderRadius: BorderRadius.circular(22),
+            ),
+            indicatorSize: TabBarIndicatorSize.tab,
+            labelColor: const Color.fromARGB(255, 97, 66, 222),
+            unselectedLabelColor: Colors.black.withValues(alpha: 0.75),
+            labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            unselectedLabelStyle: const TextStyle(fontSize: 12),
+            dividerColor: Colors.transparent,
+            padding: EdgeInsets.zero,
+            tabs: const [
+              Tab(
+                height: 36, // Giới hạn chiều cao tab nhỏ hơn
+                icon: Icon(Icons.inventory_2, size: 16), // Icon nhỏ
+                text: 'Hàng hóa',
+              ),
+              Tab(
+                height: 36,
+                icon: Icon(Icons.account_balance, size: 16),
+                text: 'TSCĐ',
+              ),
+            ],
+          ),
         ),
       ),
+    ),
       body: TabBarView(
         controller: _tabController,
         children: const [
@@ -2081,7 +2272,87 @@ class _InventoryImageManagerState extends State<InventoryImageManager> {
       EasyLoading.showError('Lỗi: $e');
     }
   }
+Future<void> _printQRsToA4() async {
+    final codes = inventoryList
+        .map((e) => (e['Ivcode'] ?? '').toString())
+        .where((code) => code.isNotEmpty)
+        .toList();
 
+    if (codes.isEmpty) {
+      EasyLoading.showError('Không có mã hàng nào để in QR');
+      return;
+    }
+
+    final pdf = pw.Document();
+
+    const itemsPerPage = 8; // 2 cột × 4 hàng, bạn có thể đổi thành 6, 9, 12...
+    const qrSize = 140.0;
+
+    for (int i = 0; i < codes.length; i += itemsPerPage) {
+      final pageCodes = codes.sublist(
+        i,
+        (i + itemsPerPage).clamp(0, codes.length),
+      );
+
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'QR Hàng hóa - Huy Phan App',
+                  style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 20),
+                pw.GridView(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 20,
+                  crossAxisSpacing: 20,
+                  childAspectRatio: 0.9,
+                  children: pageCodes.map((code) {
+                    return pw.Column(
+                      mainAxisSize: pw.MainAxisSize.min,
+                      children: [
+                        pw.BarcodeWidget(
+                          barcode: pw.Barcode.qrCode(
+                            
+                          ),
+                          data: 'HPAPP:$code',
+                          width: qrSize,
+                          height: qrSize,
+                          drawText: false,
+                        ),
+                        pw.SizedBox(height: 8),
+                        pw.Text(
+                          code,
+                          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                        ),
+                        pw.Text(
+                          'Huy Phan App',
+                          style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
+
+    // Mở hộp thoại preview và in
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'QR_HangHoa_${DateTime.now().toString().substring(0, 10)}.pdf',
+    );
+
+    EasyLoading.showSuccess('Đã mở preview in QR hàng hóa (chọn máy in A4)');
+  }
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -2193,12 +2464,26 @@ class _InventoryImageManagerState extends State<InventoryImageManager> {
             icon: const Icon(Icons.qr_code_2, size: 28),
             label: const Text('Tạo QR hàng loạt', style: TextStyle(fontSize: 18)),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color.fromARGB(255, 93, 18, 224),
+              backgroundColor: const Color.fromARGB(255, 69, 0, 245),
               foregroundColor: Colors.white,
               minimumSize: const Size.fromHeight(60),
             ),
           ),
         ),
+        Padding(
+  padding: const EdgeInsets.all(16),
+  child: ElevatedButton.icon(
+    onPressed: _printQRsToA4,
+    icon: const Icon(Icons.print, size: 28),
+    label: const Text('In QR ra giấy A4', style: TextStyle(fontSize: 18)),
+    style: ElevatedButton.styleFrom(
+      backgroundColor: const Color.fromARGB(255, 69, 0, 245),
+      foregroundColor: Colors.white,
+      minimumSize: const Size.fromHeight(60),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+  ),
+),
       ],
     );
   }
@@ -2454,7 +2739,7 @@ class _AssetImageManagerState extends State<AssetImageManager> {
                                           child: Image.network(
                                             buildImageUrl(item['imagePath']),
                                             fit: BoxFit.cover,
-                                            errorBuilder: (_, _, _) => const Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
+                                            errorBuilder: (_, _, _) => const Icon(Icons.image_not_supported, size: 50, color: Color.fromARGB(255, 97, 66, 222)),
                                           ),
                                         )
                                       : const Center(child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey)),
@@ -2475,14 +2760,14 @@ class _AssetImageManagerState extends State<AssetImageManager> {
                                       onPressed: () => _pickAndUploadImage(code),
                                       icon: const Icon(Icons.upload, size: 18),
                                       label: const Text('Ảnh'),
-                                      style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 148, 118, 198), minimumSize: const Size(100, 40)),
+                                      style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 97, 66, 222), minimumSize: const Size(100, 40)),
                                     ),
                                     const SizedBox(height: 8),
                                     ElevatedButton.icon(
                                       onPressed: () => _showQRDialog(code, name),
                                       icon: const Icon(Icons.qr_code, size: 18),
                                       label: const Text('QR'),
-                                      style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 208, 173, 121), foregroundColor: Colors.white, minimumSize: const Size(100, 40)),
+                                      style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 97, 66, 222), foregroundColor: Colors.white, minimumSize: const Size(100, 40)),
                                     ),
                                   ],
                                 ),
@@ -2500,16 +2785,110 @@ class _AssetImageManagerState extends State<AssetImageManager> {
             icon: const Icon(Icons.qr_code_2, size: 28),
             label: const Text('Tạo QR hàng loạt', style: TextStyle(fontSize: 18)),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepPurple,
+              backgroundColor: const Color.fromARGB(55, 33, 8, 218),
               foregroundColor: Colors.white,
               minimumSize: const Size.fromHeight(60),
             ),
           ),
         ),
+        Padding(
+  padding: const EdgeInsets.all(16),
+  child: ElevatedButton.icon(
+    onPressed: _printQRsToA4,
+    icon: const Icon(Icons.print, size: 28),
+    label: const Text('In QR ra giấy A4', style: TextStyle(fontSize: 18)),
+    style: ElevatedButton.styleFrom(
+      backgroundColor: const Color.fromARGB(55, 33, 8, 218),
+      foregroundColor: Colors.white,
+      minimumSize: const Size.fromHeight(60),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+  ),
+),
       ],
     );
   }
+Future<void> _printQRsToA4() async {
+    final codes = assetList
+        .map((e) => (e['Ivcode'] ?? '').toString())
+        .where((code) => code.isNotEmpty)
+        .toList();
 
+    if (codes.isEmpty) {
+      EasyLoading.showError('Không có mã hàng nào để in QR');
+      return;
+    }
+
+    final pdf = pw.Document();
+
+    const itemsPerPage = 8; // 2 cột × 4 hàng, bạn có thể đổi thành 6, 9, 12...
+    const qrSize = 140.0;
+
+    for (int i = 0; i < codes.length; i += itemsPerPage) {
+      final pageCodes = codes.sublist(
+        i,
+        (i + itemsPerPage).clamp(0, codes.length),
+      );
+
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'QR Hàng hóa - Huy Phan App',
+                  style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 20),
+                pw.GridView(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 20,
+                  crossAxisSpacing: 20,
+                  childAspectRatio: 0.9,
+                  children: pageCodes.map((code) {
+                    return pw.Column(
+                      mainAxisSize: pw.MainAxisSize.min,
+                      children: [
+                        pw.BarcodeWidget(
+                          barcode: pw.Barcode.qrCode(
+                            
+                          ),
+                          data: 'HPAPP:$code',
+                          width: qrSize,
+                          height: qrSize,
+                          drawText: false,
+                        ),
+                        pw.SizedBox(height: 8),
+                        pw.Text(
+                          code,
+                          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                        ),
+                        pw.Text(
+                          'Huy Phan App',
+                          style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
+
+    // Mở hộp thoại preview và in
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'QR_HangHoa_${DateTime.now().toString().substring(0, 10)}.pdf',
+    );
+
+    EasyLoading.showSuccess('Đã mở preview in QR hàng hóa (chọn máy in A4)');
+  }
   @override
   void dispose() {
     _searchController.dispose();
@@ -2540,38 +2919,76 @@ class _PhysicalInventoryScreenState extends State<PhysicalInventoryScreen>
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Kiểm kê vật lý'),
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Tải lại toàn bộ',
-            onPressed: () {}, // Có thể thêm reload nếu cần
+ @override
+Widget build(BuildContext context) {
+  return Scaffold(
+    appBar: AppBar(
+      title: const Text('Kiểm kê hàng hóa'),
+      centerTitle: true,
+      backgroundColor: const Color.fromARGB(255, 121, 121, 221),
+      foregroundColor: const Color.fromARGB(255, 2, 0, 0),
+      elevation: 0,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh, size: 22),
+          tooltip: 'Tải lại',
+          onPressed: () {}, // Thêm logic reload sau
+        ),
+      ],
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(42.0), // Siêu nhỏ gọn, không overflow
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.45),
+              width: 0.8, // Viền siêu mỏng
+            ),
           ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          tabs: const [
-            Tab(icon: Icon(Icons.inventory_2), text: 'Kiểm kê hàng hóa'),
-            Tab(icon: Icon(Icons.account_balance), text: 'Kiểm kê TSCD/CCDC'),
-          ],
+          child: TabBar(
+            controller: _tabController,
+            indicator: BoxDecoration(
+              color: const Color.fromARGB(255, 255, 255, 255),
+              borderRadius: BorderRadius.circular(22),
+            ),
+            indicatorSize: TabBarIndicatorSize.tab,
+            labelColor: const Color.fromARGB(255, 97, 66, 222),
+            unselectedLabelColor: Colors.black.withValues(alpha: 0.75),
+            labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            unselectedLabelStyle: const TextStyle(fontSize: 12),
+            dividerColor: Colors.transparent,
+            padding: EdgeInsets.zero,
+            tabs: const [
+              Tab(
+                height: 36, // Giới hạn chiều cao tab nhỏ hơn
+                icon: Icon(Icons.inventory_2, size: 16), // Icon nhỏ
+                text: 'Hàng hóa',
+              ),
+              Tab(
+                height: 36,
+                icon: Icon(Icons.account_balance, size: 16),
+                text: 'TSCĐ',
+              ),
+            ],
+          ),
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: const [
-          InventoryPhysicalTab(),
-          AssetPhysicalTab(),
-        ],
-      ),
-    );
-  }
+    ),
+    body: TabBarView(
+      controller: _tabController,
+      children: const [
+        InventoryPhysicalTab(),
+        AssetPhysicalTab(),
+      ],
+    ),
+  );
+}
 }
 
 // ================== TAB 1: KIỂM KÊ HÀNG HÓA ==================
@@ -2694,6 +3111,7 @@ class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
         final phys = physicalMap[key];
         final merged = Map<String, dynamic>.from(sys);
         merged['vphis'] = phys != null ? (phys['vphis'] ?? 0.0) : 0.0;
+        merged['createdDate'] = phys != null ? phys['createdDate'] : null;
         return merged;
       }).toList();
 
@@ -2711,27 +3129,40 @@ class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
   }
 
   Future<void> _processScan(String qrData) async {
-    if (!qrData.startsWith('HPAPP:')) {
-      setState(() => _scanMessage = 'QR không hợp lệ (cần: HPAPP:mã_hàng)');
+  if (!qrData.startsWith('HPAPP:')) {
+    setState(() => _scanMessage = 'QR không hợp lệ (cần: HPAPP:mã_hàng)');
+    return;
+  }
+  final ivcode = qrData.substring(6).trim();
+  setState(() => _scanMessage = 'Đang xử lý mã: $ivcode...');
+
+  try {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/inventory/search'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'QRCode': ivcode}),
+    ).timeout(const Duration(seconds: 15));
+
+    print('Status: ${response.statusCode} | Body: ${response.body.substring(0, response.body.length.clamp(0, 500))}...');
+
+    if (response.statusCode != 200) {
+      setState(() => _scanMessage = 'Lỗi server: ${response.statusCode}');
       return;
     }
-    final ivcode = qrData.substring(6).trim();
-    setState(() => _scanMessage = 'Đang xử lý mã: $ivcode...');
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/inventory/search'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'QRCode': ivcode}),
-      ).timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200) {
-        setState(() => _scanMessage = 'Lỗi server: ${response.statusCode}');
-        return;
-      }
-      final data = jsonDecode(response.body);
-      if (data['success'] != true || data['data'] == null || (data['data'] as List).isEmpty) {
-        setState(() => _scanMessage = 'Không tìm thấy sản phẩm');
-        return;
-      }
+
+    // Kiểm tra body có phải JSON không
+    if (response.body.trim().isEmpty || !response.body.startsWith('{') && !response.body.startsWith('[')) {
+      setState(() => _scanMessage = 'Dữ liệu server không hợp lệ (không phải JSON)');
+      print('Body không phải JSON: ${response.body}');
+      return;
+    }
+
+    final data = jsonDecode(response.body);
+
+    if (data['success'] != true || data['data'] == null || (data['data'] as List?)?.isEmpty == true) {
+      setState(() => _scanMessage = data['message'] ?? 'Không tìm thấy sản phẩm');
+      return;
+    }
       final List<dynamic> rawList = data['data'];
       final filtered = rawList.where((item) {
         bool match = true;
@@ -2841,7 +3272,7 @@ class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
               }
               Navigator.pop(context, true);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 97, 66, 222)),
             child: const Text('Lưu'),
           ),
         ],
@@ -3034,7 +3465,7 @@ class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.qr_code_2, size: 100, color: Colors.teal),
+                        const Icon(Icons.qr_code_2, size: 100, color: Color.fromARGB(255, 97, 66, 222)),
                         const SizedBox(height: 16),
                         ElevatedButton.icon(
                           icon: const Icon(Icons.qr_code_scanner),
@@ -3086,8 +3517,22 @@ class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
                                 'Mã: ${item['ivcode'] ?? item['code'] ?? '---'}',
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                               ),
+                              const SizedBox(height: 4),
+                          Text(   // ← DÒNG NÀY LÀ MỚI, SIÊU QUAN TRỌNG
+                            item['iname'] ?? item['name'] ?? 'Không có tên',
+                            style: const TextStyle(fontSize: 15, color: Colors.black87, fontWeight: FontWeight.w600),
+                          ),
                               Text('Kho: $rvcName'),
                               Text('Tồn hệ thống: ${formatCleanQty(systemQty)}'),
+                              if (item['createdDate'] != null)
+                          Text(
+                            'Ngày kiểm kê: ${item['createdDate']}',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.blueGrey,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
                               const SizedBox(height: 10),
                               Row(
                                 children: [
@@ -3108,7 +3553,7 @@ class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
                                   const SizedBox(width: 12),
                                   ElevatedButton(
                                     onPressed: () => _saveSingle(i),
-                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700),
+                                    style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 97, 66, 222)),
                                     child: const Text('Lưu dòng này'),
                                   ),
                                 ],
@@ -3174,125 +3619,177 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
   String? _scanMessage;
   bool _isLoading = false;
 
-  List<Map<String, dynamic>> assets = []; // Danh sách tài sản
-  List<TextEditingController> vphisControllers = []; // Controller cho mỗi dòng
+  List<Map<String, dynamic>> assets = [];
+  List<TextEditingController> vphisControllers = [];
+
+  String _currentVPeriod = '';
+  final TextEditingController _vPeriodController = TextEditingController();
 
   String selectedLocation = '';
-  List<Map<String, String>> locations = [];
+  String selectedDepartment = '';
+
   List<Map<String, String>> uniqueLocations = [];
+  List<Map<String, String>> uniqueDepartments = [];
+
   String get baseUrl => AppConfig.baseUrl;
+
   final TextEditingController _assetCodeController = TextEditingController();
- // final TextEditingController _locationCodeController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+
+    // Tự động điền năm-tháng hiện tại (YYYYMM)
+    final now = DateTime.now();
+    _currentVPeriod = '${now.year}${now.month.toString().padLeft(2, '0')}';
+    _vPeriodController.text = _currentVPeriod;
+
     _loadAssets();
-    loadUniqueLocations();  // ← Đổi tên và gọi ở đây
-    _loadLocations();
+    loadUniqueLocations();
+    loadUniqueDepartments();
   }
-Future<void> loadUniqueLocations() async {
-  if (baseUrl.isEmpty) return;
 
-  try {
-    final url = '$baseUrl/api/asset-physical/get';
-    final response = await http.get(Uri.parse(url));
+  // Load danh sách vị trí duy nhất
+  Future<void> loadUniqueLocations() async {
+    if (baseUrl.isEmpty) return;
 
-    if (response.statusCode == 200) {
-      final List<dynamic> rawData = jsonDecode(response.body);
+    try {
+      final url = '$baseUrl/api/asset-phish/get';
+      final response = await http.get(Uri.parse(url));
 
-      final Map<String, String> locMap = {};
+      if (response.statusCode == 200) {
+        final List<dynamic> rawData = jsonDecode(response.body);
+        final Map<String, String> locMap = {};
 
-      for (var item in rawData) {
-        final code = (item['LocationCode'] ?? '').toString().trim();
-        String name = (item['LocationName'] ?? 'Không tên').toString().trim(); // ← Dùng trường mới
+        for (var item in rawData) {
+          final code = (item['LocationCode'] ?? '').toString().trim();
+          String name = (item['LocationName'] ?? 'Không tên').toString().trim();
 
-        if (code.isNotEmpty) {
-          if (!locMap.containsKey(code) || (locMap[code] == 'Không tên' && name != 'Không tên')) {
-            locMap[code] = name;
+          if (code.isNotEmpty) {
+            if (!locMap.containsKey(code) || (locMap[code] == 'Không tên' && name != 'Không tên')) {
+              locMap[code] = name;
+            }
           }
         }
+
+        uniqueLocations = locMap.entries.map((e) => {'code': e.key, 'name': e.value}).toList()
+          ..sort((a, b) => a['code']!.compareTo(b['code']!));
+
+        setState(() {});
+      }
+    } catch (e) {
+      print('Lỗi tải location: $e');
+    }
+  }
+
+  // Load danh sách phòng ban duy nhất
+  Future<void> loadUniqueDepartments() async {
+    if (baseUrl.isEmpty) return;
+
+    try {
+      final url = '$baseUrl/api/asset-phish/get';
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> rawData = jsonDecode(response.body);
+        final Map<String, String> deptMap = {};
+
+        for (var item in rawData) {
+          final code = (item['DepartmentCode'] ?? '').toString().trim();
+          String name = (item['DepartmentName'] ?? 'Chưa có tên').toString().trim();
+
+          print('Department: Code=$code, Name=$name');
+
+          if (code.isNotEmpty) {
+            if (!deptMap.containsKey(code) || (deptMap[code] == 'Chưa có tên' && name != 'Chưa có tên')) {
+              deptMap[code] = name;
+            }
+          }
+        }
+
+        uniqueDepartments = deptMap.entries.map((e) => {'code': e.key, 'name': e.value}).toList()
+          ..sort((a, b) => a['code']!.compareTo(b['code']!));
+
+        print('Tổng phòng ban duy nhất: ${uniqueDepartments.length}');
+        setState(() {});
+      }
+    } catch (e) {
+      print('Lỗi tải department: $e');
+    }
+  }
+
+  Future<void> _loadAssets() async {
+    if (baseUrl.isEmpty) {
+      EasyLoading.showError('Chưa đăng nhập');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    EasyLoading.show(status: 'Đang tải danh sách tài sản...');
+
+    try {
+      var url = '$baseUrl/api/asset-phish/get';
+      final queryParams = <String, String>{};
+
+      final assetClassCode = _assetCodeController.text.trim();
+      if (assetClassCode.isNotEmpty) {
+        queryParams['assetClassName'] = assetClassCode;
       }
 
-      uniqueLocations = locMap.entries.map((e) => {
-        'code': e.key,
-        'name': e.value,
-      }).toList()
-        ..sort((a, b) => a['code']!.compareTo(b['code']!));
+      if (selectedDepartment.isNotEmpty) {
+        queryParams['departmentCode'] = selectedDepartment;
+      }
 
-      setState(() {});
-    }
-  } catch (e) {
-    print('Lỗi tải location: $e');
-  }
-}
-  Future<void> _loadAssets() async {
-  if (baseUrl.isEmpty) {
-    EasyLoading.showError('Chưa đăng nhập');
-    return;
-  }
-  
+      if (selectedLocation.isNotEmpty) {
+        queryParams['locationCode'] = selectedLocation;
+      }
 
-  setState(() => _isLoading = true);
-  EasyLoading.show(status: 'Đang tải danh sách tài sản...');
+      if (queryParams.isNotEmpty) {
+        url += '?${Uri(queryParameters: queryParams).query}';
+      }
 
-  try {
-    // Đổi sang endpoint có Vphis (nếu backend của bạn dùng /api/asset-phish/get-checked)
-    // Nếu vẫn dùng /api/asset-physical/get → đảm bảo backend đã join bảng QRAssetPhisical
-    var url = '$baseUrl/api/asset-phish/get'; // hoặc '/api/asset-phish/get-checked'
+      print('Gọi API: $url');
 
-    if (selectedLocation.isNotEmpty) {
-      url += '?locationCode=$selectedLocation';
-    }
+      final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
 
-    print('Gọi API: $url');
+      if (res.statusCode == 200) {
+        final List<dynamic> rawData = jsonDecode(res.body);
 
-    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
-    print('Status: ${res.statusCode} | Body đầu: ${res.body.substring(0, res.body.length > 500 ? 500 : res.body.length)}');
+        setState(() {
+          assets = rawData.map((e) {
+            final map = Map<String, dynamic>.from(e);
+            return {
+              'AssetClassCode': map['AssetClassCode']?.toString().trim() ?? '',
+              'AssetClassName': map['AssetClassName']?.toString().trim() ?? 'Không tên',
+              'DepartmentCode': map['DepartmentCode']?.toString().trim() ?? '',
+              'DepartmentName': map['DepartmentName']?.toString().trim() ?? 'Chưa có',
+              'LocationCode': map['LocationCode']?.toString().trim() ?? '',
+              'SlvgQty': map['SlvgQty']?.toString() ?? '0',
+              'PhisUser': map['PhisUser']?.toString().trim() ?? 'Chưa có',
+              'Vphis': map['Vphis']?.toString() ?? '0',
+              'CreatedDate': map['CreatedDate'] ?? 'Chưa kiểm kê',
+            };
+          }).toList();
 
-    if (res.statusCode == 200) {
-      final List<dynamic> rawData = jsonDecode(res.body);
-
-      setState(() {
-        assets = rawData.map((e) {
-          final map = Map<String, dynamic>.from(e);
-          return {
-            'AssetClassCode': map['AssetClassCode']?.toString().trim() ?? '',
-            'AssetClassName': map['AssetClassName']?.toString().trim() ?? 'Không tên',
-            'DepartmentCode': map['DepartmentCode']?.toString().trim() ?? '',
-            'LocationCode': map['LocationCode']?.toString().trim() ?? '',
-            'SlvgQty': map['SlvgQty']?.toString() ?? '0',
-            'PhisUser': map['PhisUser']?.toString().trim() ?? 'Chưa có',
-            'Vphis': map['Vphis']?.toString() ?? '0',  // ← Lấy từ DB
-            'CreatedDate': map['CreatedDate']?.toString() ?? 'Chưa kiểm kê',
-          };
-        }).toList();
-
-        // Tạo và điền giá trị Vphis vào TextField
-        vphisControllers = List.generate(assets.length, (i) {
-          final ctrl = TextEditingController();
-          final vphis = assets[i]['Vphis'] ?? '0';
-          ctrl.text = formatCleanQty(vphis); // Điền giá trị đã lưu từ DB
-          return ctrl;
+          vphisControllers = List.generate(assets.length, (i) {
+            final ctrl = TextEditingController();
+            final vphis = assets[i]['Vphis'] ?? '0';
+            ctrl.text = formatCleanQty(vphis);
+            return ctrl;
+          });
         });
-      });
 
-      print('Tải được ${assets.length} tài sản, có Vphis từ DB');
-    } else {
-      EasyLoading.showError('Lỗi tải: ${res.statusCode}');
+        print('Tải được ${assets.length} tài sản');
+      } else {
+        EasyLoading.showError('Lỗi tải: ${res.statusCode}');
+      }
+    } catch (e) {
+      print('Lỗi: $e');
+      EasyLoading.showError('Không thể tải dữ liệu');
+    } finally {
+      EasyLoading.dismiss();
+      setState(() => _isLoading = false);
     }
-  } catch (e) {
-    print('Lỗi: $e');
-    EasyLoading.showError('Không thể tải dữ liệu');
-  } finally {
-    EasyLoading.dismiss();
-    setState(() => _isLoading = false);
-  }
-}
-
-  Future<void> _loadLocations() async {
-    // Nếu cần dropdown vị trí, giữ nguyên logic cũ
-    // ...
   }
 
   Future<void> _saveVphis(int index) async {
@@ -3305,13 +3802,18 @@ Future<void> loadUniqueLocations() async {
       return;
     }
 
+    if (_currentVPeriod.length != 6 || int.tryParse(_currentVPeriod) == null) {
+      EasyLoading.showError('VPeriod phải là 6 chữ số (YYYYMM)');
+      return;
+    }
+
     final saveData = {
       'AssetClassCode': item['AssetClassCode'],
       'Vend': double.tryParse(item['SlvgQty'].toString().replaceAll(',', '.')) ?? 0.0,
       'Vphis': vphis,
       'LocationCode': item['LocationCode'],
       'DepartmentCode': item['DepartmentCode'],
-      'Vperiod': 'DEFAULT',
+      'Vperiod': _currentVPeriod,
       'CreatedBy': 'MobileApp',
     };
 
@@ -3326,8 +3828,12 @@ Future<void> loadUniqueLocations() async {
       final result = jsonDecode(res.body);
       if (res.statusCode == 200 && result['success'] == true) {
         EasyLoading.showSuccess('Đã lưu thành công');
-        // Reload để cập nhật nếu backend trả Vphis mới
-        await _loadAssets();
+
+        setState(() {
+          vphisControllers[index].text = formatCleanQty(vphis.toStringAsFixed(2));
+          assets[index]['Vphis'] = vphis.toString();
+          assets[index]['CreatedDate'] = DateTime.now().toString();
+        });
       } else {
         EasyLoading.showError(result['message'] ?? 'Lưu thất bại');
       }
@@ -3367,12 +3873,9 @@ Future<void> loadUniqueLocations() async {
 
       final item = data['data'];
 
-      // Tìm index trong danh sách để cập nhật TextField
       final index = assets.indexWhere((e) => e['AssetClassCode'] == code);
       if (index != -1) {
-        // Nếu đã có trong danh sách → focus vào TextField đó
-        vphisControllers[index].text = ''; // Xóa để người dùng gõ mới
-        // Có thể scroll đến dòng đó nếu cần (dùng ScrollController)
+        vphisControllers[index].text = '';
       }
 
       await _showVphisInputDialog(item, index);
@@ -3393,6 +3896,7 @@ Future<void> loadUniqueLocations() async {
     final phisUser = item['phisUser'] ?? '';
     final location = item['locationCode'] ?? '';
     final dept = item['departmentCode'] ?? '';
+    final createdDate = item['CreatedDate'] ?? 'Chưa kiểm kê';
 
     final ctrl = TextEditingController();
 
@@ -3408,7 +3912,12 @@ Future<void> loadUniqueLocations() async {
               Text('Tên: $name', style: const TextStyle(fontWeight: FontWeight.bold)),
               Text('Vị trí: $location | Phòng ban: $dept'),
               Text('Người dùng: $phisUser'),
-              Text('Hệ thống: ${formatCleanQty(slvgQty)}', style: const TextStyle(color: Colors.blueGrey)),
+              Text('Hệ thống: ${formatCleanQty(slvgQty)}', style: const TextStyle(color: Color.fromARGB(255, 97, 66, 222))),
+              const SizedBox(height: 8),
+              Text(
+                'Ngày kiểm kê trước: $createdDate',
+                style: const TextStyle(fontSize: 13, color: Colors.blueGrey, fontStyle: FontStyle.italic),
+              ),
               const SizedBox(height: 16),
               TextField(
                 controller: ctrl,
@@ -3451,7 +3960,7 @@ Future<void> loadUniqueLocations() async {
       'Vphis': vphis,
       'LocationCode': location,
       'DepartmentCode': dept,
-      'Vperiod': 'DEFAULT',
+      'Vperiod': _currentVPeriod,
       'CreatedBy': 'MobileApp',
     };
 
@@ -3467,14 +3976,14 @@ Future<void> loadUniqueLocations() async {
       if (res.statusCode == 200 && result['success'] == true) {
         EasyLoading.showSuccess('Đã lưu thành công');
 
-        // Nếu tài sản đã có trong danh sách → cập nhật TextField
         if (existingIndex != null && existingIndex >= 0) {
           setState(() {
-            vphisControllers[existingIndex].text = formatCleanQty(vphis.toString());
+            vphisControllers[existingIndex].text = formatCleanQty(vphis.toStringAsFixed(2));
+            assets[existingIndex]['Vphis'] = vphis.toString();
+            assets[existingIndex]['CreatedDate'] = DateTime.now().toString();
           });
         }
 
-        // Reload toàn bộ để đồng bộ
         await _loadAssets();
       } else {
         EasyLoading.showError(result['message'] ?? 'Lưu thất bại');
@@ -3486,922 +3995,443 @@ Future<void> loadUniqueLocations() async {
     }
   }
 
-@override
-Widget build(BuildContext context) {
-  print('AssetPhysicalTab build - _isScanning: $_isScanning'); // Debug
-
-  return Column(
-    children: [
-      // === PHẦN TÌM KIẾM (giống AssetCheckScreen) - luôn ở đầu ===
-  Padding(
-  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-  child: Column(
-    children: [
-      Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _assetCodeController,
-              decoration: InputDecoration(
-                labelText: 'Mã TS/CCDC (AssetClassName)',
-                hintText: 'VD: TSCD001, PC-001...',
-                prefixIcon: const Icon(Icons.qr_code_2, color: Colors.deepPurple),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-                filled: true,
-                fillColor: Colors.grey[100],
-              ),
-              onSubmitted: (_) => _loadAssets(),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              initialValue: selectedLocation.isEmpty ? null : selectedLocation, // ← Sửa deprecated: dùng initialValue
-              hint: const Text('Chọn vị trí'),
-              isExpanded: true,
-              decoration: InputDecoration(
-                labelText: 'Vị trí (LocationCode)',
-                hintStyle: const TextStyle(color: Colors.grey),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-                filled: true,
-                fillColor: Colors.grey[100],
-                prefixIcon: const Icon(Icons.location_on, color: Colors.deepPurple),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              ),
-              items: uniqueLocations.isEmpty
-                  ? [const DropdownMenuItem(value: null, child: Text('Đang tải...'))]
-                  : uniqueLocations.map((loc) {
-                      // Sửa null safety: check loc['name'] trước khi truy cập .isNotEmpty
-                      final name = loc['name'] ?? 'Không tên';
-                      final display = name != 'Không tên' && name.isNotEmpty
-                          ? '${loc['code'] ?? ''} - $name'
-                          : (loc['code'] ?? 'Không mã');
-
-                      return DropdownMenuItem<String>(
-                        value: loc['code'] ?? '', // ← Dùng ?? '' để tránh null
-                        child: Text(
-                          display,
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      );
-                    }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  selectedLocation = value ?? '';
-                });
-                _loadAssets(); // Tự động tìm kiếm khi chọn
-              },
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 12),
-      Row(
-        children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.search),
-              label: const Text('Tìm kiếm'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-              ),
-              onPressed: _isLoading ? null : _loadAssets,
-            ),
-          ),
-          const SizedBox(width: 12),
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.deepPurple),
-            tooltip: 'Tải lại toàn bộ',
-            onPressed: () {
-              _assetCodeController.clear();
-              setState(() => selectedLocation = ''); // Xóa filter vị trí
-              _loadAssets();
-            },
-          ),
-        ],
-      ),
-    ],
-  ),
-),
-      // === PHẦN CAMERA - đẩy xuống dưới, giới hạn chiều cao ===
-      SizedBox(
-        height: MediaQuery.of(context).size.height * 0.20, // 50% màn hình - điều chỉnh nếu cần (0.45 ~ 0.55)
-        child: Stack(
-          fit: StackFit.expand,
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: _loadAssets,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Camera khi quét
-            if (_isScanning)
-              MobileScanner(
-                controller: cameraController,
-                onDetect: (capture) {
-                  final qr = capture.barcodes.firstOrNull?.rawValue;
-                  if (qr != null && _isScanning) {
-                    setState(() => _isScanning = false);
-                    _processScan(qr);
-                  }
+            // Ô VPeriod
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _vPeriodController,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(6),
+                ],
+                decoration: InputDecoration(
+                  labelText: 'VPeriod (YYYYMM) - Gõ kỳ kiểm kê',
+                  hintText: 'Ví dụ: 202601',
+                  prefixIcon: const Icon(Icons.calendar_today, color: Colors.deepPurple),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                  filled: true,
+                  fillColor: Colors.grey[100],
+                  counterText: '',
+                ),
+                onChanged: (value) {
+                  _currentVPeriod = value.trim();
                 },
               ),
+            ),
 
-            // Khi không quét: nền sáng + nút bật
-            if (!_isScanning)
-              Container(
-                color: Colors.grey.shade100,
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+            // Phần tìm kiếm
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Column(
+                children: [
+                  Row(
                     children: [
-                      const Icon(
-                        Icons.camera_alt_rounded,
-                        size: 80,
-                        color: Color.fromARGB(255, 58, 183, 139),
+                      Expanded(
+                        child: TextField(
+                          controller: _assetCodeController,
+                          decoration: InputDecoration(
+                            labelText: 'Mã TS/CCDC',
+                            hintText: 'VD: TSCD001, PC-001...',
+                            prefixIcon: const Icon(Icons.qr_code_2, color: Color.fromARGB(255, 97, 66, 222)),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                            filled: true,
+                            fillColor: Colors.grey[100],
+                          ),
+                          onSubmitted: (_) => _loadAssets(),
+                        ),
                       ),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.qr_code_scanner),
-                        label: const Text(
-                          'BẬT QUÉT QR',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: selectedLocation.isEmpty ? null : selectedLocation,
+                          hint: const Text('Chọn vị trí'),
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            labelText: 'Vị trí',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                            filled: true,
+                            fillColor: Colors.grey[100],
+                            prefixIcon: const Icon(Icons.location_on, color: Colors.deepPurple),
+                          ),
+                          items: uniqueLocations.isEmpty
+                              ? [const DropdownMenuItem(value: null, child: Text('Đang tải...'))]
+                              : uniqueLocations.map((loc) {
+                                  final name = loc['name'] ?? 'Không tên';
+                                  final display = name != 'Không tên' && name.isNotEmpty
+                                      ? '${loc['code']} - $name'
+                                      : loc['code']!;
+                                  return DropdownMenuItem<String>(
+                                    value: loc['code'],
+                                    child: Text(display, overflow: TextOverflow.ellipsis),
+                                  );
+                                }).toList(),
+                          onChanged: (value) {
+                            setState(() => selectedLocation = value ?? '');
+                            _loadAssets();
+                          },
                         ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color.fromARGB(255, 45, 156, 168),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
-                          elevation: 8,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: selectedDepartment.isEmpty ? null : selectedDepartment,
+                          hint: const Text('Chọn phòng ban'),
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            labelText: 'Phòng ban',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                            filled: true,
+                            fillColor: Colors.grey[100],
+                            prefixIcon: const Icon(Icons.business, color: Colors.deepPurple),
+                          ),
+                          items: uniqueDepartments.isEmpty
+                              ? [const DropdownMenuItem(value: null, child: Text('Đang tải...'))]
+                              : uniqueDepartments.map((dept) {
+                                  final code = dept['code'] ?? 'Không mã';
+                                  final name = dept['name'] ?? 'Chưa có tên';
+                                  final display = name.trim().isEmpty || name == 'Chưa có tên'
+                                      ? '$code - Không có tên'
+                                      : '$code - $name';
+                                  return DropdownMenuItem<String>(
+                                    value: code,
+                                    child: Text(
+                                      display,
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  );
+                                }).toList(),
+                          onChanged: (value) {
+                            setState(() => selectedDepartment = value ?? '');
+                            _loadAssets();
+                          },
                         ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.search),
+                          label: const Text('Tìm kiếm'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.deepPurple,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                          ),
+                          onPressed: _isLoading ? null : _loadAssets,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      IconButton(
+                        icon: const Icon(Icons.refresh, color: Colors.deepPurple),
+                        tooltip: 'Tải lại toàn bộ',
                         onPressed: () {
+                          _assetCodeController.clear();
                           setState(() {
-                            _isScanning = true;
-                            _scanMessage = null;
+                            selectedLocation = '';
+                            selectedDepartment = '';
                           });
+                          _loadAssets();
                         },
                       ),
                     ],
                   ),
-                ),
-              ),
-
-            // Nút đóng
-            if (_isScanning)
-              Positioned(
-                top: 40,
-                right: 16,
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white, size: 40),
-                  onPressed: () => setState(() => _isScanning = false),
-                ),
-              ),
-
-            // Thông báo
-            if (_scanMessage != null)
-              Positioned(
-                bottom: 40,
-                left: 24,
-                right: 24,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  child: Text(
-                    _scanMessage!,
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-
-      // === DANH SÁCH TÀI SẢN - chiếm hết phần còn lại ===
-      Expanded(
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.grey.shade50,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            children: [
-              // Header + refresh
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Row(
-                  children: [
-                    const Text(
-                      'Danh sách tài sản',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.refresh_rounded, color: Colors.deepPurple),
-                      onPressed: _loadAssets,
-                    ),
-                  ],
-                ),
-              ),
-
-              // Dropdown vị trí (nếu có)
-              if (locations.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: DropdownButtonFormField<String>(
-                    initialValue: selectedLocation.isEmpty ? null : selectedLocation,
-                    hint: const Text('Chọn vị trí'),
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    items: locations.map((loc) {
-                      return DropdownMenuItem<String>(
-                        value: loc['code'] ?? '',
-                        child: Text('${loc['code']} - ${loc['name']}'),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      setState(() {
-                        selectedLocation = val ?? '';
-                        _loadAssets();
-                      });
-                    },
-                  ),
-                ),
-
-              // Danh sách
-              Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : assets.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.inventory_2_outlined, size: 90, color: Colors.grey[400]),
-                                const SizedBox(height: 16),
-                                const Text('Chưa có tài sản nào', style: TextStyle(fontSize: 18, color: Colors.grey)),
-                                const SizedBox(height: 8),
-                                const Text('Quét QR hoặc làm mới để tải dữ liệu', style: TextStyle(color: Colors.grey)),
-                              ],
-                            ),
-                          )
-                        : ListView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            itemCount: assets.length,
-                            itemBuilder: (context, index) {
-                              // Giữ nguyên code hiển thị mỗi item của bạn
-                              final item = assets[index];
-                              final code = item['AssetClassCode'] ?? '';
-                              final name = item['AssetClassName'] ?? 'Không tên';
-                              final dept = item['DepartmentCode'] ?? '';
-                              final loc = item['LocationCode'] ?? '';
-                              final slvgQty = item['SlvgQty'] ?? '0';
-                              final phisUser = item['PhisUser'] ?? 'Chưa có';
-                              final vphisCtrl = vphisControllers[index];
-                              final parsedVphis = double.tryParse(vphisCtrl.text.replaceAll(',', '.')) ?? 0.0;
-                              final qtyColor = parsedVphis > 0 ? Colors.green.shade700 : Colors.red.shade700;
-
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 12),
-                                elevation: 2,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  code,
-                                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(name, style: const TextStyle(fontSize: 16)),
-                                              ],
-                                            ),
-                                          ),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                            decoration: BoxDecoration(
-                                              color: Colors.black.withValues(alpha: 0.75),
-                                              borderRadius: BorderRadius.circular(20),
-                                            ),
-                                            child: Text(
-                                              formatCleanQty(vphisCtrl.text),
-                                              style: TextStyle(
-                                                color: qtyColor,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 16,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const Divider(height: 24),
-                                      Text('Vị trí: $loc • Phòng ban: $dept'),
-                                      const SizedBox(height: 4),
-                                      Text('Người dùng: $phisUser', style: const TextStyle(color: Colors.blueGrey)),
-                                      Text(
-                                        'Hệ thống: ${formatCleanQty(slvgQty)}',
-                                        style: const TextStyle(color: Colors.blueGrey),
-                                      ),
-                                      const SizedBox(height: 16),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: TextField(
-                                              controller: vphisCtrl,
-                                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                              inputFormatters: [
-                                                FilteringTextInputFormatter.allow(RegExp(r'^\d+[,.]?\d{0,2}')),
-                                              ],
-                                              decoration: InputDecoration(
-                                                labelText: 'Thực tế (Vphis)',
-                                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                                filled: true,
-                                                fillColor: Colors.white,
-                                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          ElevatedButton(
-                                            onPressed: () => _saveVphis(index),
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: Colors.green.shade700,
-                                              foregroundColor: Colors.white,
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                                            ),
-                                            child: const Text('LƯU'),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ],
-  );
-}
-  @override
-void dispose() {
-  cameraController.dispose();
-  
-  for (var ctrl in vphisControllers) {
-    ctrl.dispose();  // ← thêm dấu ngoặc {}
-  }
-  
-  super.dispose();
-  
-}
-}
-
-// Thêm class GameScreen này vào cuối file (trước dấu } cuối cùng của file)
-class GameScreen extends StatefulWidget {
-  const GameScreen({super.key});
-
-  @override
-  State<GameScreen> createState() => _GameScreenState();
-}
-
-class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
-  static const double ballRadius = 24.0;
-  static const double cupWidth = 100.0;
-  static const double cupHeight = 120.0;
-  static const int totalLevels = 20;
-
-  int currentLevel = 1;
-  int score = 0;
-  int requiredHits = 1;
-  bool gameWon = false;
-  bool ballThrown = false;
-    bool isDragging = false;
-    Offset? dragStart;
-    Offset? dragCurrent;
-  Offset ballPos = const Offset(140, 680);
-  Offset ballVel = Offset.zero;
-
-  // Physics mượt, bay xa/thấp
-  double gravity = 0.26;
-  double drag = 0.993;
-  double throwMultiplier = 17.0;
-
-  late AnimationController _animController;
-  double cupX = 0;
-  double cupSpeed = 0.8;
-  double cupDir = 1.0;
-  List<Rect> obstacles = [];
-  final rng = math.Random();
-
-  late double screenWidth;
-  late double screenHeight;
-
-  // Hiệu ứng particle khi trúng
-  List<Particle> particles = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 16),
-    );
-    _animController.addListener(_physicsTick);
-    _animController.repeat();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final size = MediaQuery.of(context).size;
-    screenWidth = size.width;
-    screenHeight = size.height;
-    _resetLevel();
-  }
-
-  void _resetLevel() {
-    if (!mounted) return;
-    setState(() {
-      ballPos = Offset(120 + rng.nextDouble() * 100, screenHeight - 160);
-      ballVel = Offset.zero;
-      ballThrown = false;
-
-      cupSpeed = 0.8 + (currentLevel - 1) * 0.38;
-      cupX = 100 + rng.nextDouble() * (screenWidth - 250);
-      cupDir = rng.nextBool() ? 1.0 : -1.0;
-
-      requiredHits = 1 + (currentLevel ~/ 4);
-
-      obstacles.clear();
-      int numObs = ((currentLevel - 3) / 2).clamp(0, 10).toInt();
-      for (int i = 0; i < numObs; i++) {
-        double obsX = 80 + rng.nextDouble() * (screenWidth - 220);
-        double obsY = 180 + rng.nextDouble() * 400;
-        obstacles.add(Rect.fromLTWH(obsX, obsY, 60 + rng.nextDouble() * 50, 30));
-      }
-
-      particles.clear();
-    });
-  }
-
-  void _physicsTick() {
-    if (!mounted || gameWon || !ballThrown) return;
-
-    setState(() {
-      ballVel = Offset(ballVel.dx * drag, ballVel.dy * drag + gravity);
-      ballPos += ballVel;
-
-      cupX += cupDir * cupSpeed;
-      if (cupX <= 30 || cupX >= screenWidth - cupWidth - 30) {
-        cupDir *= -1;
-      }
-
-      final ballRect = Rect.fromCircle(center: ballPos, radius: ballRadius);
-      for (Rect obs in obstacles) {
-        if (ballRect.overlaps(obs)) {
-          ballVel = Offset(
-            ballVel.dx * -0.65 + (rng.nextDouble() - 0.5) * 3,
-            ballVel.dy * -0.55,
-          );
-          break;
-        }
-      }
-
-      final cupRect = Rect.fromLTWH(cupX, 140, cupWidth, cupHeight);
-      if (ballRect.overlaps(cupRect) && ballVel.dy > 0) {
-        score++;
-        _createParticles(ballPos);
-        _showHitEffect();
-        if (score >= requiredHits) {
-          if (currentLevel < totalLevels) {
-            currentLevel++;
-            score = 0;
-            _resetLevel();
-          } else {
-            gameWon = true;
-            _animController.stop();
-            if (mounted) {
-              Timer(const Duration(seconds: 2), () {
-                if (mounted) Navigator.pop(context);
-              });
-            }
-          }
-        } else {
-          _resetLevel();
-        }
-      }
-
-      if (ballPos.dy > screenHeight + 80) {
-        _resetLevel();
-      }
-
-      // Update particle
-      particles = particles.map((p) => p.update()).where((p) => p.alpha > 0).toList();
-    });
-  }
-List<Widget> _buildDragPreview() {
-  if (dragStart == null || dragCurrent == null) return [];
-
-  final start = dragStart!;
-  final end = dragCurrent!;
-  final delta = end - start;
-  final dist = delta.distance.clamp(0.0, 220.0);
-
-  return [
-    // Đường kéo mờ
-    Positioned(
-      left: ballPos.dx - ballRadius + start.dx,
-      top: ballPos.dy - ballRadius + start.dy,
-      child: Transform.rotate(
-        angle: math.atan2(delta.dy, delta.dx),
-        child: Container(
-          width: dist,
-          height: 4,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.white.withValues(alpha: 0.1), Colors.white.withValues(alpha: 0.7)],
-            ),
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-      ),
-    ),
-    // Mũi tên nhỏ ở đầu kéo
-    Positioned(
-      left: ballPos.dx - ballRadius + end.dx - 12,
-      top: ballPos.dy - ballRadius + end.dy - 12,
-      child: Transform.rotate(
-        angle: math.atan2(delta.dy, delta.dx) + math.pi / 2,
-        child: Icon(
-  Icons.arrow_drop_up,
-  color: Colors.white.withValues(alpha: 0.9),
-  size: 28,
-),
-      ),
-    ),
-  ];
-}
-  void _createParticles(Offset pos) {
-    for (int i = 0; i < 12; i++) {
-      double angle = rng.nextDouble() * math.pi * 2;
-      double speed = 2 + rng.nextDouble() * 4;
-      particles.add(Particle(
-        pos: pos,
-        vel: Offset(math.cos(angle) * speed, math.sin(angle) * speed - 3),
-        color: Colors.yellowAccent.withValues(alpha: 0.9),
-        size: 6 + rng.nextDouble() * 6,
-      ));
-    }
-  }
-
-  void _showHitEffect() {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Tuyệt vời! Trúng $score/$requiredHits'),
-        backgroundColor: Colors.green.shade700,
-        duration: const Duration(milliseconds: 700),
-      ),
-    );
-  }
-
-  
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Nền trời đẹp
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF87CEEB), Color(0xFFE0F7FA)],
-                stops: [0.0, 0.7],
-              ),
-            ),
-          ),
-
-          // Đám mây nền (tĩnh)
-          Positioned(
-            top: 40,
-            left: 50,
-            child: _buildCloud(120, 60),
-          ),
-          Positioned(
-            top: 80,
-            right: 80,
-            child: _buildCloud(160, 80),
-          ),
-
-          // Mặt đất cỏ
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: 140,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.green.shade700, Colors.green.shade400],
-                ),
-                boxShadow: [
-                  BoxShadow(color: Colors.black26, blurRadius: 20, offset: const Offset(0, -10)),
                 ],
               ),
             ),
-          ),
 
-          // Chướng ngại
-          ...obstacles.map((obs) => Positioned(
-                left: obs.left,
-                top: obs.top,
-                child: Container(
-                  width: obs.width,
-                  height: obs.height,
-                  decoration: BoxDecoration(
-                    color: Colors.brown.shade700,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.brown.shade900, width: 3),
-                    boxShadow: [BoxShadow(color: Colors.black38, blurRadius: 10)],
-                  ),
-                ),
-              )),
-
-          // Ly (cốc) đẹp hơn
-          Positioned(
-            left: cupX,
-            top: 160,
-            child: Stack(
-              children: [
-                // Bóng đổ dưới ly
-                Positioned(
-                  left: 10,
-                  top: cupHeight - 20,
-                  child: Container(
-                    width: cupWidth - 20,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(50),
+            // Phần camera
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.20,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (_isScanning)
+                    MobileScanner(
+                      controller: cameraController,
+                      onDetect: (capture) {
+                        final qr = capture.barcodes.firstOrNull?.rawValue;
+                        if (qr != null && _isScanning) {
+                          setState(() => _isScanning = false);
+                          _processScan(qr);
+                        }
+                      },
                     ),
-                  ),
-                ),
-                Container(
-                  width: cupWidth,
-                  height: cupHeight,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFF43A047),
-                    Color(0xFF81C784),
-                  ],
-                ),
-                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(60)),
-                    border: Border.all(color: Colors.white, width: 6),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black45, blurRadius: 20, offset: const Offset(0, 12)),
-                    ],
-                  ),
-                  child: Center(
-                    child: Icon(Icons.wine_bar, size: 70, color: Colors.white.withValues(alpha: 0.9)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Bóng + bóng đổ
-         // Trong build → thay phần Positioned của bóng
-Positioned(
-  left: ballPos.dx - ballRadius,
-  top: ballPos.dy - ballRadius,
-  child: Stack(
-    children: [
-      if (ballPos.dy < screenHeight - 100)
-        Positioned(
-          left: ballRadius - 15,
-          top: ballRadius + 10,
-          child: Container(
-            width: ballRadius * 1.8,
-            height: ballRadius * 0.6,
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.35),
-              borderRadius: BorderRadius.circular(30),
-            ),
-          ),
-        ),
-
-      if (isDragging) ..._buildDragPreview(),
-
-      GestureDetector(
-        onPanStart: (details) {
-          if (ballThrown) return;
-          setState(() {
-            isDragging = true;
-            dragStart = details.localPosition;
-            dragCurrent = details.localPosition;
-          });
-        },
-        onPanUpdate: (details) {
-          if (!isDragging) return;
-          setState(() {
-            dragCurrent = details.localPosition;
-          });
-        },
-        onPanEnd: (_) {  // không cần details ở đây nữa
-          if (!isDragging || ballThrown) return;
-
-          final dragDelta = dragCurrent! - dragStart!;
-          final distance = dragDelta.distance;
-
-          if (distance < 30) {
-            setState(() => isDragging = false);
-            return;
-          }
-
-          final power = (distance / 100).clamp(0.4, 2.2).toDouble();
-
-          final direction = Offset(
-            dragDelta.dx * 0.4,
-            -dragDelta.dy.abs().clamp(80.0, 300.0).toDouble(),
-          );
-
-          setState(() {
-            ballVel = direction * power * 0.18;
-            ballThrown = true;
-            isDragging = false;
-          });
-        },
-        child: Container(
-          width: ballRadius * 2,
-          height: ballRadius * 2,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF43A047), Color(0xFF81C784)],
-            ),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(color: Colors.orangeAccent.withValues(alpha: 0.6), blurRadius: 15, spreadRadius: 4),
-              BoxShadow(color: Colors.black54, blurRadius: 12, offset: const Offset(4, 8)),
-            ],
-          ),
-          child: const Icon(Icons.sports_volleyball, color: Colors.white, size: 36),
-        ),
-      ),
-    ],
-  ),
-),
-          // Particle khi trúng
-          ...particles.map((p) => Positioned(
-                left: p.pos.dx - p.size / 2,
-                top: p.pos.dy - p.size / 2,
-                child: Container(
-                  width: p.size,
-                  height: p.size,
-                  decoration: BoxDecoration(
-                    color: p.color.withValues(alpha: p.alpha),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              )),
-
-          // HUD đẹp
-          SafeArea(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 32),
-                        onPressed: () {
-                          _animController.stop();
-                          Navigator.pop(context);
-                        },
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(30),
-                        ),
+                  if (!_isScanning)
+                    Container(
+                      color: Colors.grey.shade100,
+                      child: Center(
                         child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(
-                              'Level $currentLevel / $totalLevels',
-                              style: const TextStyle(fontSize: 22, color: Colors.white, fontWeight: FontWeight.bold),
+                            const Icon(
+                              Icons.camera_alt_rounded,
+                              size: 80,
+                              color: Color.fromARGB(255, 58, 183, 139),
                             ),
-                            Text(
-                              'Trúng: $score / $requiredHits',
-                              style: const TextStyle(fontSize: 18, color: Colors.yellowAccent),
+                            const SizedBox(height: 24),
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.qr_code_scanner),
+                              label: const Text(
+                                'BẬT QUÉT QR',
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color.fromARGB(255, 97, 66, 222),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
+                                elevation: 8,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _isScanning = true;
+                                  _scanMessage = null;
+                                });
+                              },
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(width: 50),
-                    ],
-                  ),
-                ),
-                const Spacer(),
-                Padding(
-                  padding: const EdgeInsets.all(30),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                    ),
+                  if (_isScanning)
+                    Positioned(
+                      top: 40,
+                      right: 16,
+                      child: IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white, size: 40),
+                        onPressed: () => setState(() => _isScanning = false),
+                      ),
+                    ),
+                  if (_scanMessage != null)
+                    Positioned(
+                      bottom: 40,
+                      left: 24,
+                      right: 24,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
                         decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.6),
+                          color: Colors.black..withValues(alpha: 0.75),
                           borderRadius: BorderRadius.circular(30),
                         ),
                         child: Text(
-                          gameWon
-                              ? '🎉 HOÀN THÀNH! Bạn đã chinh phục 20 level!\nĐang quay về đăng nhập...'
-                              : 'Vuốt nhẹ lên hoặc xiên để ném bóng xa vào ly!',
-                          style: TextStyle(
-                            fontSize: 22,
-                            color: gameWon ? Colors.greenAccent : Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          _scanMessage!,
+                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                           textAlign: TextAlign.center,
                         ),
                       ),
-                      if (!gameWon) ...[
-                        const SizedBox(height: 16),
-                        Text(
-                          'Ly di chuyển nhanh hơn ở level cao\nNém nhẹ tay, bóng sẽ bay xa và đẹp!',
-                          style: TextStyle(fontSize: 16, color: Colors.white70),
-                          textAlign: TextAlign.center,
+                    ),
+                ],
+              ),
+            ),
+
+            // Phần danh sách - tự mở rộng khi nhiều item
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Row(
+                      children: [
+                        const Text(
+                          'Danh sách tài sản',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.refresh_rounded, color: Color.fromARGB(255, 58, 183, 148)),
+                          onPressed: _loadAssets,
                         ),
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildCloud(double width, double height) {
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(100),
-        boxShadow: [BoxShadow(color: Colors.white.withValues(alpha: 0.4), blurRadius: 20)],
+                  // Loading hoặc Empty
+                  if (_isLoading)
+                    const Padding(
+                      padding: EdgeInsets.all(32.0),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (assets.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(32.0),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.inventory_2_outlined, size: 90, color: Colors.grey[400]),
+                            const SizedBox(height: 16),
+                            const Text('Chưa có tài sản nào', style: TextStyle(fontSize: 18, color: Colors.grey)),
+                            const SizedBox(height: 8),
+                            const Text('Quét QR hoặc làm mới để tải dữ liệu', style: TextStyle(color: Colors.grey)),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    ListView.builder(
+                      shrinkWrap: true, // ← Quan trọng: tự mở rộng chiều cao
+                      physics: const NeverScrollableScrollPhysics(), // Tắt scroll riêng, để SingleChildScrollView xử lý
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      itemCount: assets.length,
+                      itemBuilder: (context, index) {
+                        final item = assets[index];
+                        final code = item['AssetClassCode'] ?? '';
+                        final name = item['AssetClassName'] ?? 'Không tên';
+                        final deptCode = item['DepartmentCode'] ?? '';
+                        final deptName = item['DepartmentName'] ?? 'Chưa có';
+                        final loc = item['LocationCode'] ?? '';
+                        final slvgQty = item['SlvgQty'] ?? '0';
+                        final phisUser = item['PhisUser'] ?? 'Chưa có';
+                        final vphisCtrl = vphisControllers[index];
+                        final parsedVphis = double.tryParse(vphisCtrl.text.replaceAll(',', '.')) ?? 0.0;
+                        final qtyColor = parsedVphis > 0 ? Colors.green.shade700 : Colors.red.shade700;
+
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(code, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                          const SizedBox(height: 4),
+                                          Text(name, style: const TextStyle(fontSize: 16)),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: const Color.fromARGB(255, 244, 216, 216).withValues(alpha: 0.7),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        formatCleanQty(vphisCtrl.text),
+                                        style: TextStyle(
+                                          color: qtyColor,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const Divider(height: 24),
+                                Text('Vị trí: $loc'),
+                                Text('Phòng ban: $deptName ($deptCode)'),
+                                Text('Người dùng: $phisUser', style: const TextStyle(color: Colors.blueGrey)),
+                                Text(
+                                  'Hệ thống: ${formatCleanQty(slvgQty)}',
+                                  style: const TextStyle(color: Colors.blueGrey),
+                                ),
+                                Text(
+                                  'Ngày kiểm kê: ${item['CreatedDate']}',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.blueGrey,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                                Text(
+                                  'Kỳ kiểm kê: $_currentVPeriod',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.deepPurple,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: vphisCtrl,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        inputFormatters: [
+                                          FilteringTextInputFormatter.allow(RegExp(r'^\d+[,.]?\d{0,2}')),
+                                        ],
+                                        decoration: InputDecoration(
+                                          labelText: 'Thực tế (Vphis)',
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                          filled: true,
+                                          fillColor: Colors.white,
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    ElevatedButton(
+                                      onPressed: () => _saveVphis(index),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green.shade700,
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                                      ),
+                                      child: const Text('LƯU'),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+                  // Thêm khoảng trống dưới cùng để dễ test kéo xuống
+                  const SizedBox(height: 300),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   @override
   void dispose() {
-    _animController.stop();
-    _animController.dispose();
+    _vPeriodController.dispose();
+    _assetCodeController.dispose();
+    for (var ctrl in vphisControllers) {
+      ctrl.dispose();
+    }
+    cameraController.dispose();
     super.dispose();
-  }
-}
-
-// Particle class cho hiệu ứng vụn khi trúng
-class Particle {
-  Offset pos;
-  Offset vel;
-  Color color;
-  double size;
-  double alpha = 1.0;
-
-  Particle({required this.pos, required this.vel, required this.color, required this.size});
-
-  Particle update() {
-    pos += vel;
-    vel = Offset(vel.dx * 0.98, vel.dy + 0.15); // rơi nhẹ
-    alpha -= 0.02;
-    return this;
   }
 }

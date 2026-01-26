@@ -30,8 +30,10 @@ namespace HuyPhanApi.Controllers
         // GET: api/asset-physical/get
         [HttpGet("get")]
 public async Task<IActionResult> GetAssetPhysical(
-    [FromQuery] string? vperiod = "DEFAULT",           // Mặc định kỳ kiểm kê
-    [FromQuery] string? locationCode = null)
+    [FromQuery] string? vperiod = "DEFAULT",
+    [FromQuery] string? locationCode = null,
+    [FromQuery] string? departmentCode = null, // Thêm nếu cần lọc phòng ban
+    [FromQuery] string? assetClassName = null) // Thêm nếu cần lọc mã tài sản
 {
     try
     {
@@ -40,6 +42,21 @@ public async Task<IActionResult> GetAssetPhysical(
 
         var sql = @"
             SET NOCOUNT ON;
+            WITH LatestPhis AS (
+                SELECT 
+                    AssetClassCode,
+                    Vphis,
+                    Vend,
+                    Vperiod,
+                    LocationCode,
+                    DepartmentCode,
+                    CreatedDate,
+                    CreatedBy,
+                    ROW_NUMBER() OVER (PARTITION BY AssetClassCode ORDER BY CreatedDate DESC) AS rn
+                FROM QRAssetPhisical
+                WHERE IsActive = 1 
+                 
+            )
             SELECT 
                 a.AssetClassCode,
                 LTRIM(RTRIM(a.AssetClassName)) AS AssetClassName,
@@ -48,22 +65,25 @@ public async Task<IActionResult> GetAssetPhysical(
                 ISNULL(a.SlvgQty, 0) AS SlvgQty,
                 LTRIM(RTRIM(a.PhisLoc)) AS PhisLoc,
                 LTRIM(RTRIM(a.PhisUser)) AS PhisUser,
-                ISNULL(p.Vphis, 0) AS Vphis,                -- ← Lấy Vphis thực tế, mặc định 0
-                ISNULL(p.Vend, ISNULL(a.SlvgQty, 0)) AS Vend,
-                ISNULL(p.Vperiod, @Vperiod) AS Vperiod,
-                p.CreatedDate,
-                p.CreatedBy
+                ISNULL(l.Vphis, 0) AS Vphis,
+                ISNULL(l.Vend, ISNULL(a.SlvgQty, 0)) AS Vend,
+                ISNULL(l.Vperiod, @Vperiod) AS Vperiod,
+                l.CreatedDate,
+                l.CreatedBy
             FROM AssetItem a
-            LEFT JOIN QRAssetPhisical p 
-                ON a.AssetClassCode = p.AssetClassCode 
-                AND p.IsActive = 1 
-                AND p.Vperiod = @Vperiod                    -- Join theo kỳ
+            LEFT JOIN LatestPhis l 
+                ON a.AssetClassCode = l.AssetClassCode 
+                AND l.rn = 1  -- Chỉ lấy bản ghi mới nhất
             WHERE 1 = 1";
 
         if (!string.IsNullOrWhiteSpace(locationCode))
-        {
             sql += " AND a.LocationCode = @LocationCode";
-        }
+
+        if (!string.IsNullOrWhiteSpace(departmentCode))
+            sql += " AND a.DepartmentCode = @DepartmentCode";
+
+        if (!string.IsNullOrWhiteSpace(assetClassName))
+            sql += " AND a.AssetClassCode LIKE '%' + @AssetClassName + '%'";
 
         sql += " ORDER BY a.AssetClassName, a.AssetClassCode";
 
@@ -73,6 +93,12 @@ public async Task<IActionResult> GetAssetPhysical(
 
         if (!string.IsNullOrWhiteSpace(locationCode))
             command.Parameters.AddWithValue("@LocationCode", locationCode.Trim());
+
+        if (!string.IsNullOrWhiteSpace(departmentCode))
+            command.Parameters.AddWithValue("@DepartmentCode", departmentCode.Trim());
+
+        if (!string.IsNullOrWhiteSpace(assetClassName))
+            command.Parameters.AddWithValue("@AssetClassName", assetClassName.Trim());
 
         await using var reader = await command.ExecuteReaderAsync();
 
@@ -89,11 +115,11 @@ public async Task<IActionResult> GetAssetPhysical(
                 ["SlvgQty"]          = reader.GetSafeDecimal("SlvgQty"),
                 ["PhisLoc"]          = reader.GetSafeString("PhisLoc") ?? "",
                 ["PhisUser"]         = reader.GetSafeString("PhisUser") ?? "Chưa có",
-                ["Vphis"]            = reader.GetSafeDecimal("Vphis"),          // ← Đã có từ DB
+                ["Vphis"]            = reader.GetSafeDecimal("Vphis"),
                 ["Vend"]             = reader.GetSafeDecimal("Vend"),
                 ["Vperiod"]          = reader.GetSafeString("Vperiod") ?? vperiod,
                 ["CreatedDate"]      = reader["CreatedDate"] is DateTime dt 
-                    ? dt.ToString("dd/MM/yyyy HH:mm") 
+                    ? dt.ToString("dd/MM/yyyy HH:mm:ss") 
                     : "Chưa kiểm kê",
                 ["CreatedBy"]        = reader.GetSafeString("CreatedBy") ?? ""
             });

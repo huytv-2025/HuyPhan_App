@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "CZhH2nL41oA=",
+  "dgSpecHash": "aSELE+146Lc=",
   "success": true,
-  "projectFilePath": "C:\\dev\\flutter_projects\\huyphan_app\\HuyPhanApi\\HuyPhanApi\\HuyPhanApi.csproj",
+  "projectFilePath": "C:\\dev\\flutter_projects\\huyphan_app\\HuyPhanApi\\HuyphanApi\\HuyPhanApi.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\user\\.nuget\\packages\\azure.core\\1.40.0\\azure.core.1.40.0.nupkg.sha512",
     "C:\\Users\\user\\.nuget\\packages\\azure.identity\\1.12.0\\azure.identity.1.12.0.nupkg.sha512",

@@ -28,8 +28,10 @@ namespace HuyPhanApi.Controllers
             // GET: api/asset-physical/get
            [HttpGet("get")]
 public async Task<IActionResult> GetAssetPhysical(
-    [FromQuery] string? assetClassName = null,
-    [FromQuery] string? locationCode = null)
+   [FromQuery] string? assetClassName = null,
+    [FromQuery] string? locationCode = null,
+    [FromQuery] string? departmentCode = null)
+    
 {
     try
     {
@@ -39,16 +41,18 @@ public async Task<IActionResult> GetAssetPhysical(
         var sql = @"
             SET NOCOUNT ON;
             SELECT 
-                a.AssetClassCode,
+                 a.AssetClassCode,
                 LTRIM(RTRIM(a.AssetClassName)) AS AssetClassName,
                 LTRIM(RTRIM(a.DepartmentCode)) AS DepartmentCode,
                 LTRIM(RTRIM(a.LocationCode)) AS LocationCode,
                 dbo.fTCVNToUnicode(d.RVCName) AS LocationName, 
+				dbo.fTCVNToUnicode(dt.DepartmentName) AS DepartmentName, 
                 ISNULL(a.SlvgQty, 0) AS SlvgQty,
                 LTRIM(RTRIM(a.PhisLoc)) AS PhisLoc,
                 LTRIM(RTRIM(a.PhisUser)) AS PhisUser
-            FROM AssetItem a
-            LEFT JOIN DefRVCList d ON a.LocationCode = d.RVCNo   -- ← Join bảng DeftRVC theo mã vị trí
+				  FROM AssetItem a
+            LEFT JOIN DefRVCList d ON a.LocationCode = d.RVCNo
+			left join Department dt on dt.DepartmentCode=a.DepartmentCode   -- ← Join bảng DeftRVC theo mã vị trí
             WHERE 1 = 1";
 
         if (!string.IsNullOrWhiteSpace(assetClassName))
@@ -56,6 +60,9 @@ public async Task<IActionResult> GetAssetPhysical(
 
         if (!string.IsNullOrWhiteSpace(locationCode))
             sql += " AND a.LocationCode = @LocationCode";
+
+        if (!string.IsNullOrWhiteSpace(departmentCode))
+        sql += " AND a.DepartmentCode = @DepartmentCode";
 
         sql += " ORDER BY a.AssetClassName, a.AssetClassCode";
 
@@ -66,6 +73,9 @@ public async Task<IActionResult> GetAssetPhysical(
 
         if (!string.IsNullOrWhiteSpace(locationCode))
             command.Parameters.AddWithValue("@LocationCode", locationCode.Trim());
+
+        if (!string.IsNullOrWhiteSpace(departmentCode))
+        command.Parameters.AddWithValue("@DepartmentCode", departmentCode.Trim());
 
         await using var reader = await command.ExecuteReaderAsync();
 
@@ -78,6 +88,7 @@ public async Task<IActionResult> GetAssetPhysical(
                 ["AssetClassCode"]  = reader.GetSafeString("AssetClassCode"),
                 ["AssetClassName"]  = reader.GetSafeString("AssetClassName") ?? "Không tên",
                 ["DepartmentCode"] = reader.GetSafeString("DepartmentCode"),
+                ["DepartmentName"] = reader.GetSafeString("DepartmentName"),
                 ["LocationCode"]   = reader.GetSafeString("LocationCode"),
                 ["LocationName"]   = reader.GetSafeString("LocationName") ?? "Không tên",  // ← Thêm trường này
                 ["SlvgQty"]        = reader.GetSafeDecimal("SlvgQty"),
