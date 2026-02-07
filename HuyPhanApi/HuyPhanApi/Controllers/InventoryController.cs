@@ -7,7 +7,7 @@ namespace HuyPhanApi.Controllers;
 [Route("api/[controller]")]
 public class InventoryController : ControllerBase
 {
-    // ← THÊM DÒNG NÀY nếu thiếu (rất quan trọng!)
+    // ← THÊM DÒNG NÀY nếu thiếu (rất quan trọng!)  
     private readonly string _connectionString;
     public InventoryController(IConfiguration configuration
         // , FcmService? fcmService = null   // Uncomment nếu cần FCM
@@ -19,84 +19,95 @@ public class InventoryController : ControllerBase
         // _fcmService = fcmService;   // Uncomment nếu cần
     }
     // GET: api/inventory?vperiod=...&search=...
-    [HttpGet("")]
-    public async Task<IActionResult> Get([FromQuery] string? vperiod, [FromQuery] string? search)
+   [HttpGet("")]
+public async Task<IActionResult> Get(
+    [FromQuery] string? vperiod,
+    [FromQuery] string? rvc,       // ← THÊM THAM SỐ NÀY
+    [FromQuery] string? search)
+{
+    try
     {
-        try
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        string filterVPeriod;
+        if (string.IsNullOrWhiteSpace(vperiod))
         {
-            await using var connection = new SqlConnection(_connectionString);
-            await connection.OpenAsync();
+            const string getLatestSql = @"
+                SELECT TOP 1 ParaStr 
+                FROM GlobPara 
+                WHERE ParaName = 'INVPeriod'";
 
-            var sql = @"
-                SELECT 
-                    i.VICode AS code,
-                    dbo.fTCVNToUnicode(id.IName) AS name,
-                    dbo.fTCVNToUnicode(ISNULL(u.UnitName, 'Cái')) AS unit,
-                    i.VEnd AS quantity,
-                    i.VPeriod AS period,
-                    i.RVC AS locationCode,
-                    dbo.fTCVNToUnicode(rvc.RVCName) AS locationName,
-                    q.ImagePath,
-                    'Inventory' AS itemType,
-                    q.QRCode
-                FROM Inventory i
-                LEFT JOIN Itemdef id ON LTRIM(RTRIM(i.VICode)) = LTRIM(RTRIM(id.Icode))
-                LEFT JOIN IUnitDef u ON id.IUnit = u.UnitCode
-                LEFT JOIN QRInventory q ON LTRIM(RTRIM(i.VICode)) = q.Ivcode
-                LEFT JOIN DefRVCList rvc ON rvc.RVCNo = i.RVC
-                WHERE 1=1 {0} AND (i.VOpen <> 0 OR i.VIn <> 0 OR i.VOut <> 0 OR i.VEnd <> 0)
-                ORDER BY code";
-
-            string filter = "";
-
-            if (!string.IsNullOrEmpty(vperiod))
-            {
-                filter += " AND i.VPeriod = @VPeriod";
-            }
-
-            if (!string.IsNullOrEmpty(search))
-            {
-                filter += @" AND (i.VICode LIKE @Search OR dbo.fTCVNToUnicode(id.IName) LIKE @Search)";
-            }
-
-            sql = string.Format(sql, filter);
-
-            await using var command = new SqlCommand(sql, connection);
-
-            if (!string.IsNullOrEmpty(vperiod))
-                command.Parameters.AddWithValue("@VPeriod", vperiod);
-
-            if (!string.IsNullOrEmpty(search))
-                command.Parameters.AddWithValue("@Search", $"%{search}%");
-
-            await using var reader = await command.ExecuteReaderAsync();
-
-            var list = new List<object>();
-            while (await reader.ReadAsync())
-            {
-                list.Add(new
-                {
-                    code = reader["code"]?.ToString()?.Trim() ?? "",
-                    name = reader["name"]?.ToString()?.Trim() ?? "",
-                    unit = reader["unit"]?.ToString()?.Trim() ?? "Cái",
-                    quantity = ((decimal)reader["quantity"]).ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    period = reader["period"]?.ToString() ?? "",
-                    locationCode = reader["locationCode"]?.ToString()?.Trim() ?? "",
-                    locationName = reader["locationName"]?.ToString()?.Trim() ?? "",
-                    imagePath = reader["ImagePath"]?.ToString()?.Trim() ?? "",
-                    itemType = "Inventory",
-                    qrCode = reader["QRCode"]?.ToString()?.Trim() ?? $"HPAPP:{reader["code"]}"
-                });
-            }
-
-            return Ok(list);
+            await using var cmdLatest = new SqlCommand(getLatestSql, connection);
+            var latest = await cmdLatest.ExecuteScalarAsync();
+            filterVPeriod = latest?.ToString()?.Trim() ?? DateTime.Now.ToString("yyyyMM");
         }
-        catch (Exception ex)
+        else
         {
-            return StatusCode(500, new { success = false, message = "Lỗi server: " + ex.Message });
+            filterVPeriod = vperiod.Trim();
         }
+
+        var sql = @"
+            SELECT 
+                i.VICode AS code,
+                dbo.fTCVNToUnicode(id.IName) AS name,
+                dbo.fTCVNToUnicode(ISNULL(u.UnitName, 'Cái')) AS unit,
+                i.VEnd AS quantity,
+                i.VPeriod AS period,
+                i.RVC AS locationCode,
+                dbo.fTCVNToUnicode(rvc.RVCName) AS locationName,
+                q.ImagePath
+            FROM Inventory i
+            LEFT JOIN Itemdef id ON LTRIM(RTRIM(i.VICode)) = LTRIM(RTRIM(id.Icode))
+            LEFT JOIN IUnitDef u ON id.IUnit = u.UnitCode
+            LEFT JOIN QRInventory q ON LTRIM(RTRIM(i.VICode)) = q.Ivcode
+            LEFT JOIN DefRVCList rvc ON rvc.RVCNo = i.RVC
+            WHERE i.VPeriod = @VPeriod And Vend<>0
+                AND (@RVC IS NULL OR i.RVC = @RVC)  -- ← THÊM ĐIỀU KIỆN LỌC KHO
+            {0}
+            ORDER BY code";
+
+        string additionalFilter = "";
+        if (!string.IsNullOrEmpty(search))
+        {
+            additionalFilter = " AND (i.VICode LIKE @Search OR dbo.fTCVNToUnicode(id.IName) LIKE @Search)";
+        }
+
+        sql = string.Format(sql, additionalFilter);
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@VPeriod", filterVPeriod);
+        command.Parameters.AddWithValue("@RVC", rvc ?? (object)DBNull.Value);  // ← Nếu không truyền rvc → null → lấy tất cả
+
+        if (!string.IsNullOrEmpty(search))
+            command.Parameters.AddWithValue("@Search", $"%{search}%");
+
+        await using var reader = await command.ExecuteReaderAsync();
+
+        var list = new List<object>();
+        while (await reader.ReadAsync())
+        {
+            list.Add(new
+            {
+                code = reader["code"]?.ToString()?.Trim() ?? "",
+                name = reader["name"]?.ToString()?.Trim() ?? "",
+                unit = reader["unit"]?.ToString()?.Trim() ?? "Cái",
+                quantity = reader.GetSafeDecimal("quantity").ToString("N0"),
+                period = filterVPeriod,
+                locationCode = reader["locationCode"]?.ToString()?.Trim() ?? "",
+                locationName = reader["locationName"]?.ToString()?.Trim() ?? "",
+                imagePath = reader["ImagePath"]?.ToString()?.Trim() ?? ""
+            });
+        }
+
+        return Ok(list);
     }
-
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Lỗi Get Inventory: {ex.Message}\nStack: {ex.StackTrace}");
+        return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
+    }
+}
     // POST: api/inventory/search (Chỉ hỗ trợ quét QR vật tư)
     [HttpPost("search")]
     public async Task<IActionResult> SearchByQR([FromBody] QRRequest request)

@@ -110,7 +110,23 @@ public async Task<IActionResult> GetPhysicalInventory(
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
+// Bước 1: Xác định filterVPeriod (tự lấy INVPeriod mới nhất nếu không gửi param)
+        string filterVPeriod;
+        if (string.IsNullOrWhiteSpace(vperiod))
+        {
+            const string getLatestSql = @"
+                SELECT TOP 1 ParaStr 
+                FROM GlobPara 
+                WHERE ParaName = 'INVPeriod'";
 
+            await using var cmdLatest = new SqlCommand(getLatestSql, connection);
+            var latest = await cmdLatest.ExecuteScalarAsync();
+            filterVPeriod = latest?.ToString()?.Trim() ?? DateTime.Now.ToString("yyyyMM");
+        }
+        else
+        {
+            filterVPeriod = vperiod.Trim();
+        }
         var sql = @"
             SELECT 
                 Ivcode,
@@ -158,7 +174,9 @@ public async Task<IActionResult> GetPhysicalInventory(
                 ["vphis"]       = reader["Vphis"] is decimal d ? d : 0m,
                 ["rvc"]         = reader["RVC"],
                 ["vperiod"]     = reader["Vperiod"],
-                ["createdDate"] = reader["CreatedDate"] is DateTime dt ? dt.ToString("dd/MM/yyyy HH:mm") : null,  // ← Format đẹp
+                ["createdDate"] = reader.IsDBNull(reader.GetOrdinal("CreatedDate")) 
+    ? null 
+    : ((DateTime)reader["CreatedDate"]).ToString("dd/MM/yyyy HH:mm"),  // ← Format đẹp
                 ["createdBy"]   = reader["CreatedBy"] ?? "Unknown"  // Optional
             });
         }

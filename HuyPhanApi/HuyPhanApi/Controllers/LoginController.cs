@@ -63,6 +63,7 @@ private async Task CreateTablesIfNotExists(SqlConnection connection)
                 CREATE TABLE [dbo].[QRAssetPhisical](
                     [Id] [bigint] IDENTITY(1,1) NOT NULL,
                     [AssetClassCode] [nvarchar](50) NOT NULL,
+                    [AssetItemCode] [nvarchar](50) NOT NULL,
                     [Vend] [decimal](18, 4) NULL DEFAULT (0),
                     [Vphis] [decimal](18, 4) NULL DEFAULT (0),
                     [LocationCode] [nvarchar](50) NULL,
@@ -102,6 +103,9 @@ private async Task CreateTablesIfNotExists(SqlConnection connection)
                 CREATE TABLE [dbo].[QRAsset](
                     [Id] [int] IDENTITY(1,1) NOT NULL,
                     [AssetClassCode] [nvarchar](50) NOT NULL,
+                    [AssetItemCode] [nvarchar](50) NOT NULL,
+                    [LocationCode] [nvarchar](50) NULL,
+                    [DepartmentCode] [nvarchar](50) NULL,
                     [QRCode] [nvarchar](200) NOT NULL,
                     [ImagePath] [nvarchar](500) NULL,
                     [CreatedBy] [nvarchar](100) NULL,

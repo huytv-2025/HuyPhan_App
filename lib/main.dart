@@ -18,11 +18,32 @@ import 'package:printing/printing.dart';
 
 
 
+
 // Global lưu base URL sau khi login thành công
 class AppConfig {
   static String baseUrl = '';
 }
+// THÊM HÀM NÀY NGAY ĐÂY (sau các import và AppConfig)
+Future<String?> fetchLatestPeriod(String type) async {
+  try {
+    final url = type == 'inventory'
+        ? '${AppConfig.baseUrl}/api/inventory/latest-period'
+        : '${AppConfig.baseUrl}/api/asset-phish/latest-period';
 
+    final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['success'] == true) {
+        return type == 'inventory' ? data['invPeriod'] : data['glPeriod'];
+      }
+    }
+  } catch (e) {
+    print('Lỗi lấy kỳ $type: $e');
+  }
+  final now = DateTime.now();
+return '${now.year}${now.month.toString().padLeft(2, '0')}'; // fallback
+}
 // ignore_for_file: avoid_print
 
 void main() async {
@@ -610,10 +631,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     _pages = [
       const HomeScreen(),
       const SaleOrderScreen(),
-    
-      
       const PhysicalInventoryScreen(),
-      const QRUpdateMenuScreen(),
       const ImageManagerScreen(),
       
     ];
@@ -671,10 +689,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Trang chủ'),
           BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Ảnh'),
-         
-         
           BottomNavigationBarItem(icon: Icon(Icons.inventory_2), label: 'Kiểm kê VL'),
-           BottomNavigationBarItem(icon: Icon(Icons.sync), label: 'Báo cáo'),
           BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Thiết lập'),
         ],
       ),
@@ -682,823 +697,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   }
 }
 
-// ================== MÀN HÌNH CẬP NHẬT QR - BÂY GIỜ DÙNG TAB GIỐNG THIẾT LẬP ==================
-class QRUpdateMenuScreen extends StatefulWidget {
-  const QRUpdateMenuScreen({super.key});
 
-  @override
-  State<QRUpdateMenuScreen> createState() => _QRUpdateMenuScreenState();
-}
-
-class _QRUpdateMenuScreenState extends State<QRUpdateMenuScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
-Widget build(BuildContext context) {
-  return Scaffold(
-    appBar: AppBar(
-      title: const Text('Báo cáo hàng tồn kho'),
-      centerTitle: true,
-      backgroundColor: const Color.fromARGB(255, 121, 201, 221),
-      foregroundColor: const Color.fromARGB(255, 2, 0, 0),
-      elevation: 0,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.refresh, size: 22),
-          tooltip: 'Tải lại',
-          onPressed: () {}, // Thêm logic reload sau
-        ),
-      ],
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(42.0), // Siêu nhỏ gọn, không overflow
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.18),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.45),
-              width: 0.8, // Viền siêu mỏng
-            ),
-          ),
-          child: TabBar(
-            controller: _tabController,
-            indicator: BoxDecoration(
-              color: const Color.fromARGB(255, 255, 255, 255),
-              borderRadius: BorderRadius.circular(22),
-            ),
-            indicatorSize: TabBarIndicatorSize.tab,
-            labelColor: const Color.fromARGB(255, 97, 66, 222),
-            unselectedLabelColor: Colors.black.withValues(alpha: 0.75),
-            labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-            unselectedLabelStyle: const TextStyle(fontSize: 12),
-            dividerColor: Colors.transparent,
-            padding: EdgeInsets.zero,
-            tabs: const [
-              Tab(
-                height: 36, // Giới hạn chiều cao tab nhỏ hơn
-                icon: Icon(Icons.inventory_2, size: 16), // Icon nhỏ
-                text: 'Hàng Hóa',
-              ),
-              Tab(
-                height: 36,
-                icon: Icon(Icons.account_balance, size: 16),
-                text: 'TSCĐ',
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-      body: TabBarView(
-        controller: _tabController,
-        children: const [
-          InventoryCheckScreen(),  // Tab 1: Kiểm kê Hàng hóa
-          AssetCheckScreen(),      // Tab 2: Kiểm kê Tài sản & CCDC
-        ],
-      ),
-    );
-  }
-}
-
-// ================== KIỂM KÊ HÀNG HÓA ==================
-class InventoryCheckScreen extends StatefulWidget {
-  const InventoryCheckScreen({super.key});
-
-  @override
-  State<InventoryCheckScreen> createState() => _InventoryCheckScreenState();
-}
-
-class _InventoryCheckScreenState extends State<InventoryCheckScreen> {
-  List<Map<String, String>> inventoryList = [];
-  bool isLoading = false;
-  final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _vperiodController = TextEditingController();
-  String get baseUrl => AppConfig.baseUrl;
-  
-  Set<String> _viewedIvCodes = {}; // Danh sách Ivcode đã xem
-
-  List<Map<String, String>> get filteredList {
-    final query = _searchController.text.toLowerCase().trim();
-    return inventoryList.where((item) {
-      final String ivcode = item['Ivcode'] ?? '';
-      final String iname = item['iname'] ?? '';
-      return ivcode.toLowerCase().contains(query) || iname.toLowerCase().contains(query);
-    }).toList();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loadInventory();
-    _loadViewedCodes();
-  }
-// Load danh sách mã đã xem từ SharedPreferences
-  Future<void> _loadViewedCodes() async {
-    final prefs = await SharedPreferences.getInstance();
-    final viewedList = prefs.getStringList('viewed_ivcodes') ?? [];
-    setState(() {
-      _viewedIvCodes = viewedList.toSet();
-    });
-  }
-  Future<void> _markAsViewed(String ivcode) async {
-    if (_viewedIvCodes.contains(ivcode)) return;
-
-    setState(() {
-      _viewedIvCodes.add(ivcode);
-    });
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('viewed_ivcodes', _viewedIvCodes.toList());
-  }
-  Future<void> _loadInventory() async {
-    if (baseUrl.isEmpty) {
-      EasyLoading.showError('Chưa đăng nhập hoặc mất kết nối server');
-      return;
-    }
-    final vperiod = _vperiodController.text.trim();
-    final search = _searchController.text.trim();
-    var url = '$baseUrl/api/inventory';
-    if (vperiod.isNotEmpty || search.isNotEmpty) {
-      final uri = Uri.parse(url).replace(queryParameters: {
-        if (vperiod.isNotEmpty) 'vperiod': vperiod,
-        if (search.isNotEmpty) 'search': search,
-      });
-      url = uri.toString();
-    }
-    EasyLoading.show(status: 'Đang tải dữ liệu tồn kho...');
-    setState(() => isLoading = true);
-    try {
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
-      if (response.statusCode == 200) {
-        final List<dynamic> rawData = jsonDecode(response.body);
-        setState(() {
-          inventoryList = rawData.map<Map<String, String>>((item) => {
-                'Ivcode': item['code']?.toString().trim() ?? '',
-                'iname': item['name']?.toString().trim() ?? 'Sản phẩm không tên',
-                'Vend': item['quantity']?.toString() ?? '0',
-                'rvc': item['locationCode']?.toString().trim() ?? '',
-                'rvcname': item['locationName']?.toString().trim() ?? '',
-                'unit': item['unit']?.toString().trim() ?? 'Cái',
-                'imagePath': item['imagePath']?.toString().trim() ?? '',
-                'Vperiod': item['period']?.toString() ?? '',
-              }).toList();
-          if (inventoryList.isNotEmpty && _vperiodController.text.trim().isEmpty) {
-            final validPeriods = inventoryList
-                .map((e) => e['Vperiod']?.trim())
-                .where((p) => p != null && p.isNotEmpty)
-                .cast<String>()
-                .toSet()
-                .toList();
-            if (validPeriods.isNotEmpty) {
-              validPeriods.sort((a, b) => b.compareTo(a));
-              _vperiodController.text = validPeriods.first;
-            }
-          }
-        });
-      } else {
-        throw Exception('Lỗi server: ${response.statusCode}');
-      }
-    } catch (e) {
-      EasyLoading.showError('Không thể tải dữ liệu: $e');
-      setState(() {
-        inventoryList = [
-          {'Ivcode': 'IV001', 'iname': 'iPhone 15 Pro Max', 'Vend': '25', 'unit': 'Cái', 'rvcname': 'Kho Hà Nội', 'imagePath': ''},
-          {'Ivcode': 'IV002', 'iname': 'MacBook Pro M3', 'Vend': '8', 'unit': 'Cái', 'rvcname': 'Kho TP.HCM', 'imagePath': ''},
-        ];
-      });
-    } finally {
-      EasyLoading.dismiss();
-      setState(() => isLoading = false);
-    }
-  }
-
-  void _showQRDialog(String ivcode, String iname, String vend) {
-    final String qrData = 'HPAPP:$ivcode';
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Mã QR - $iname'),
-        content: SizedBox(
-          width: 300,
-          height: 420,
-          child: Column(
-            children: [
-              QrImageView(data: qrData, version: QrVersions.auto, size: 250, backgroundColor: Colors.white, errorCorrectionLevel: QrErrorCorrectLevel.H),
-              const SizedBox(height: 20),
-              Text('Mã hàng: $ivcode', style: const TextStyle(fontWeight: FontWeight.bold)),
-              Text('Tồn kho: $vend cái', style: const TextStyle(color: Color.fromARGB(255, 97, 66, 222))),
-              const SizedBox(height: 10),
-              const Text('Quét bằng bất kỳ ứng dụng QR nào', style: TextStyle(fontSize: 14, color: Colors.grey)),
-            ],
-          ),
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Đóng'))],
-      ),
-    );
-  }
-String formatCleanQty(dynamic qty) {
-  if (qty == null || qty == 0) return '0';
-  String str = qty.toString().replaceAll(',', ''); // Loại bỏ dấu phẩy cũ nếu có
-  double? num = double.tryParse(str);
-  if (num == null) return '0';
-  if (num == num.round()) return num.round().toString(); // Nếu nguyên → không thập phân
-  return num.toStringAsFixed(2).replaceAll('.', ','); // Hiển thị với dấu phẩy (Việt Nam)
-}
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          hintText: 'Tìm Ivcode hoặc tên sản phẩm...',
-                          prefixIcon: const Icon(Icons.search),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-                          filled: true,
-                          fillColor: Colors.grey[100],
-                        ),
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    SizedBox(
-                      width: 120,
-                      child: TextField(
-                        controller: _vperiodController,
-                        decoration: InputDecoration(
-                          hintText: 'Vperiod',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-                          filled: true,
-                          fillColor: Colors.grey[100],
-                        ),
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  onPressed: isLoading ? null : _loadInventory,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Làm mới danh sách'),
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 97, 66, 222), minimumSize: const Size.fromHeight(50)),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : filteredList.isEmpty
-                    ? const Center(child: Text('Không có dữ liệu', style: TextStyle(fontSize: 18)))
-                    : SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: DataTable(
-                          headingRowColor: WidgetStateProperty.all(Colors.teal.shade50),
-                          dataRowMinHeight: 80,
-                          dataRowMaxHeight: 80,
-                          columns: const [
-                            DataColumn(label: Text('Mã hàng', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('Tên sản phẩm', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('Đơn vị', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('Tồn kho', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('VPeriod', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('LocationCode', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('LocationName', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('Ảnh', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('QR', style: TextStyle(fontWeight: FontWeight.bold))),
-                          ],
-                          rows: filteredList.map((item) {
-                            final String ivcode = item['Ivcode'] ?? '';
-                            final String iname = item['iname'] ?? 'Sản phẩm $ivcode';
-                            final String vend = item['Vend'] ?? '0';
-                            // Kiểm tra xem mã này đã xem chưa
-                            final bool isNew = !_viewedIvCodes.contains(ivcode);
-                            return DataRow(
-    // Khi tap dòng → đánh dấu đã xem
-    onSelectChanged: (selected) {
-      if (selected == true && isNew) {
-        _markAsViewed(ivcode);
-        setState(() {}); // Cập nhật UI ngay
-      }
-    },
-    cells: [
-      // Chỉ 1 cell cho cột "Mã hàng" (text + badge chồng lên)
-      DataCell(
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Text(
-              ivcode,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            if (isNew)
-              Positioned(
-                right: -12,
-                top: -8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.red,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'Mới',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-
-                                DataCell(Text(iname)),
-                                DataCell(Text(item['unit'] ?? 'Cái', style: const TextStyle(color: Colors.indigo, fontWeight: FontWeight.w600))),
-                                DataCell(Text(formatCleanQty(item['Vend']), style: const TextStyle(color: Color.fromARGB(255, 94, 76, 175), fontWeight: FontWeight.bold))),
-                                DataCell(Text(item['Vperiod'] ?? '', style: const TextStyle(fontSize: 14))),
-                                DataCell(Text(item['rvc'] ?? '', style: const TextStyle(fontSize: 14))),
-                                DataCell(Text(item['rvcname'] ?? '', style: const TextStyle(fontSize: 14))),
-                                DataCell(
-                                  Container(
-                                    width: 80,
-                                    height: 80,
-                                    decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade400), borderRadius: BorderRadius.circular(12)),
-                                    child: item['imagePath']?.isNotEmpty == true
-                                        ? ClipRRect(
-                                            borderRadius: BorderRadius.circular(12),
-                                            child: Image.network(
-                                              buildImageUrl(item['imagePath']),
-                                              fit: BoxFit.cover,
-                                              loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                                              errorBuilder: (_, _, _) => const Icon(Icons.image, size: 40, color: Colors.grey),
-                                            ),
-                                          )
-                                        : const Center(
-                                            child: Column(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              children: [
-                                                Icon(Icons.image_not_supported, size: 40, color: Colors.grey),
-                                                Text('Chưa có', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                                              ],
-                                            ),
-                                          ),
-                                  ),
-                                ),
-                                DataCell(
-                                  GestureDetector(
-                                    onTap: () => _showQRDialog(ivcode, iname, vend),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                      decoration: BoxDecoration(color: Colors.teal.shade100, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.teal)),
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.qr_code_scanner, color: Colors.teal, size: 20),
-                                          SizedBox(width: 8),
-                                          Text('Xem QR', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            );
-                          }).toList(),
-                        ),
-                      ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    _vperiodController.dispose();
-    super.dispose();
-  }
-}
-
-// ================== KIỂM KÊ TÀI SẢN & CCDC ==================
-class AssetCheckScreen extends StatefulWidget {
-  const AssetCheckScreen({super.key});
-
-  @override
-  State<AssetCheckScreen> createState() => _AssetCheckScreenState();
-}
-
-class _AssetCheckScreenState extends State<AssetCheckScreen> {
-  List<Map<String, String>> assetList = [];
-  bool isLoading = false;
-  bool _isScanning = false;
-  String? _scanMessage;
-
-  final MobileScannerController cameraController = MobileScannerController(
-    detectionSpeed: DetectionSpeed.noDuplicates,
-    facing: CameraFacing.back,
-  );
-
-  // Chỉ giữ 2 controller: Mã TS/CCDC và Mã phòng ban
-  final TextEditingController _assetCodeController = TextEditingController();
-  final TextEditingController _departmentCodeController = TextEditingController();
-
-  String get baseUrl => AppConfig.baseUrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAssets(); // Tải lần đầu không filter
-  }
-
-  Future<void> _loadAssets() async {
-    if (baseUrl.isEmpty) {
-      EasyLoading.showError('Chưa đăng nhập hoặc baseUrl rỗng');
-      return;
-    }
-
-    setState(() => isLoading = true);
-    EasyLoading.show(status: 'Đang tải danh sách tài sản...');
-
-    try {
-      var url = '$baseUrl/api/asset-phish/get';
-
-      final queryParams = <String, String>{};
-
-      // Tìm theo Mã TS/CCDC (AssetClassName)
-      final assetClassCode = _assetCodeController.text.trim();
-      if (assetClassCode.isNotEmpty) {
-        queryParams['assetClassName'] = assetClassCode;
-      }
-
-      // Tìm theo Mã phòng ban (DepartmentCode)
-      final departmentCode = _departmentCodeController.text.trim();
-      if (departmentCode.isNotEmpty) {
-        queryParams['departmentCode'] = departmentCode;
-      }
-
-      if (queryParams.isNotEmpty) {
-        url += '?${Uri(queryParameters: queryParams).query}';
-      }
-
-      print('Gọi API tài sản: $url');
-
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
-      print('Status: ${response.statusCode} | Body đầu: ${response.body.substring(0, response.body.length.clamp(0, 300))}...');
-
-      if (response.statusCode == 200) {
-        final List<dynamic> rawData = jsonDecode(response.body);
-        setState(() {
-          assetList = rawData.map<Map<String, String>>((item) => {
-                'AssetClassCode': item['AssetClassCode']?.toString().trim() ?? '',
-                'AssetClassName': item['AssetClassName']?.toString().trim() ?? 'Không tên',
-                'DepartmentCode': item['DepartmentCode']?.toString().trim() ?? '',
-                'LocationCode': item['LocationCode']?.toString().trim() ?? '',
-                'SlvgQty': item['SlvgQty']?.toString() ?? '0',
-                'PhisUser': item['PhisUser']?.toString().trim() ?? '',
-                'PhisLoc': item['PhisLoc']?.toString().trim() ?? '',
-                'imagePath': item['imagePath']?.toString().trim() ?? '',
-              }).toList();
-        });
-      } else {
-        EasyLoading.showError('Lỗi server: ${response.statusCode}');
-        print('Lỗi response: ${response.body}');
-      }
-    } catch (e) {
-      print('Lỗi tải tài sản: $e');
-      EasyLoading.showError('Không thể tải dữ liệu: $e');
-    } finally {
-      EasyLoading.dismiss();
-      if (mounted) setState(() => isLoading = false);
-    }
-  }
-
-  void _showQRDialog(String code, String name, String qty) {
-    final String qrData = 'HPAPP:$code';
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Mã QR - $name'),
-        content: SizedBox(
-          width: 300,
-          height: 420,
-          child: Column(
-            children: [
-              QrImageView(
-                data: qrData,
-                version: QrVersions.auto,
-                size: 250,
-                backgroundColor: Colors.white,
-                errorCorrectionLevel: QrErrorCorrectLevel.H,
-              ),
-              const SizedBox(height: 20),
-              Text('Mã TS/CCDC: $code', style: const TextStyle(fontWeight: FontWeight.bold)),
-              Text('Số lượng: $qty', style: const TextStyle(color: Colors.green)),
-              const SizedBox(height: 10),
-              const Text('Quét bằng bất kỳ ứng dụng QR nào', style: TextStyle(fontSize: 14, color: Colors.grey)),
-            ],
-          ),
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Đóng'))],
-      ),
-    );
-  }
-
-  String formatCleanQty(dynamic qty) {
-    if (qty == null || qty == 0) return '0';
-    String str = qty.toString().replaceAll(',', '');
-    if (!str.contains('.')) return str;
-    final parts = str.split('.');
-    final integerPart = parts[0];
-    String decimalPart = parts.length > 1 ? parts[1] : '';
-    if (decimalPart.replaceAll('0', '').isEmpty) return integerPart;
-    decimalPart = decimalPart.replaceAll(RegExp(r'0+$'), '');
-    if (decimalPart.isEmpty) return integerPart;
-    return '$integerPart.$decimalPart';
-  }
-
-  void _processScan(String? code) {
-    if (code == null || code.trim().isEmpty) {
-      setState(() {
-        _scanMessage = 'Không quét được mã hợp lệ';
-      });
-      return;
-    }
-
-    final String scannedCode = code.trim();
-    setState(() {
-      _scanMessage = 'Đã quét thành công: $scannedCode\nĐang tìm kiếm...';
-      isLoading = true;
-      _isScanning = false;
-    });
-
-    _assetCodeController.text = scannedCode;
-    _loadAssets().then((_) {
-      setState(() {
-        _scanMessage = 'Tìm thấy dữ liệu cho mã: $scannedCode';
-        isLoading = false;
-      });
-    }).catchError((e) {
-      setState(() {
-        _scanMessage = 'Lỗi khi tải dữ liệu: $e';
-        isLoading = false;
-      });
-    });
-
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted) setState(() => _scanMessage = null);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          // Phần tìm kiếm - ĐÃ BỎ Ô MÃ VỊ TRÍ
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _assetCodeController,
-                        decoration: InputDecoration(
-                          labelText: 'Mã TS/CCDC',
-                          hintText: 'VD: TSCD001, PC-001...',
-                          prefixIcon: const Icon(Icons.qr_code_2, color: Colors.deepPurple),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-                          filled: true,
-                          fillColor: Colors.grey[100],
-                        ),
-                        onSubmitted: (_) => _loadAssets(),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _departmentCodeController,
-                        decoration: InputDecoration(
-                          labelText: 'Mã phòng ban',
-                          hintText: 'VD: PB01, KE TOAN...',
-                          prefixIcon: const Icon(Icons.business, color: Colors.deepPurple),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-                          filled: true,
-                          fillColor: Colors.grey[100],
-                        ),
-                        onSubmitted: (_) => _loadAssets(),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.search),
-                        label: const Text('Tìm kiếm'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.deepPurple,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                        ),
-                        onPressed: isLoading ? null : _loadAssets,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    IconButton(
-                      icon: const Icon(Icons.refresh, color: Colors.deepPurple),
-                      tooltip: 'Tải lại toàn bộ',
-                      onPressed: () {
-                        _assetCodeController.clear();
-                        _departmentCodeController.clear();
-                        _loadAssets();
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // Phần camera + danh sách (giữ nguyên)
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _isScanning
-                    ? Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          MobileScanner(
-                            controller: cameraController,
-                            onDetect: (capture) {
-                              final qr = capture.barcodes.firstOrNull?.rawValue;
-                              if (qr != null && _isScanning) {
-                                setState(() => _isScanning = false);
-                                _processScan(qr);
-                              }
-                            },
-                          ),
-                          Positioned(
-                            top: 16,
-                            right: 16,
-                            child: IconButton(
-                              icon: const Icon(Icons.close, color: Colors.white, size: 40),
-                              onPressed: () => setState(() => _isScanning = false),
-                            ),
-                          ),
-                          if (_scanMessage != null)
-                            Positioned(
-                              bottom: 40,
-                              left: 24,
-                              right: 24,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha:0.7),
-                                  borderRadius: BorderRadius.circular(30),
-                                ),
-                                child: Text(
-                                  _scanMessage!,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            ),
-                        ],
-                      )
-                    : assetList.isEmpty
-                        ? const Center(child: Text('Không có dữ liệu', style: TextStyle(fontSize: 18)))
-                        : SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: DataTable(
-                              headingRowColor: WidgetStateProperty.all(Colors.deepPurple.shade50),
-                              dataRowMinHeight: 80,
-                              dataRowMaxHeight: 100,
-                              columns: const [
-                                DataColumn(label: Text('Mã TS/CCDC', style: TextStyle(fontWeight: FontWeight.bold))),
-                                DataColumn(label: Text('Tên tài sản', style: TextStyle(fontWeight: FontWeight.bold))),
-                                DataColumn(label: Text('Phòng ban', style: TextStyle(fontWeight: FontWeight.bold))),
-                                DataColumn(label: Text('Vị trí', style: TextStyle(fontWeight: FontWeight.bold))),
-                                DataColumn(label: Text('Số lượng', style: TextStyle(fontWeight: FontWeight.bold))),
-                                DataColumn(label: Text('Người dùng', style: TextStyle(fontWeight: FontWeight.bold))),
-                                DataColumn(label: Text('QR', style: TextStyle(fontWeight: FontWeight.bold))),
-                              ],
-                              rows: assetList.map((item) {
-                                final String code = item['AssetClassCode'] ?? '';
-                                final String name = item['AssetClassName'] ?? '';
-                                final String qty = item['SlvgQty'] ?? '0';
-                                final String dept = item['DepartmentCode'] ?? '';
-                                final String loc = item['LocationCode'] ?? item['PhisLoc'] ?? '';
-                                final String user = item['PhisUser'] ?? '';
-                                return DataRow(
-                                  cells: [
-                                    DataCell(Text(code, style: const TextStyle(fontWeight: FontWeight.w600))),
-                                    DataCell(Text(name)),
-                                    DataCell(Text(dept)),
-                                    DataCell(Text(loc)),
-                                    DataCell(Text(formatCleanQty(qty), style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold))),
-                                    DataCell(Text(user)),
-                                    DataCell(
-                                      GestureDetector(
-                                        onTap: () => _showQRDialog(code, name, qty),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                          decoration: BoxDecoration(
-                                            color: Colors.deepPurple.shade100,
-                                            borderRadius: BorderRadius.circular(20),
-                                            border: Border.all(color: Colors.deepPurple),
-                                          ),
-                                          child: const Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(Icons.qr_code_scanner, color: Color.fromARGB(255, 141, 105, 202), size: 20),
-                                              SizedBox(width: 8),
-                                              Text('Xem QR', style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold)),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              }).toList(),
-                            ),
-                          ),
-          ),
-
-          if (!_isScanning)
-            Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Align(
-                alignment: Alignment.bottomRight,
-                child: FloatingActionButton.extended(
-                  onPressed: () {
-                    setState(() {
-                      _isScanning = true;
-                      _scanMessage = null;
-                    });
-                  },
-                  backgroundColor: Colors.deepPurple.shade700,
-                  icon: const Icon(Icons.camera_alt),
-                  label: const Text('Bật Camera'),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _assetCodeController.dispose();
-    _departmentCodeController.dispose();
-    cameraController.dispose();
-    super.dispose();
-  }
-}
 class QRScannerOverlay extends StatelessWidget {
   const QRScannerOverlay({super.key});
 
@@ -2113,35 +1312,130 @@ class _InventoryImageManagerState extends State<InventoryImageManager> {
   List<Map<String, String>> inventoryList = [];
   bool isLoading = false;
   final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _vperiodController = TextEditingController();
-  final ImagePicker _picker = ImagePicker();
 
+  // Dropdown kỳ
+  String? selectedPeriod;
+  List<String> availablePeriods = [];
+
+  // Dropdown kho (RVC) - giống phần Kiểm kê
+  String? selectedRVC;                    // null = không filter kho
+  List<Map<String, String>> availableRVCs = [];  // Danh sách kho có sẵn
+
+  final ImagePicker _picker = ImagePicker();
   String get baseUrl => AppConfig.baseUrl;
 
   @override
   void initState() {
     super.initState();
-    _loadInventory();
+    _loadAllInventory();  // Load toàn bộ để lấy kỳ + kho
   }
 
-  Future<void> _loadInventory() async {
+  // Load toàn bộ dữ liệu (không filter) để lấy danh sách kỳ và kho
+  Future<void> _loadAllInventory() async {
     if (baseUrl.isEmpty) {
       EasyLoading.showError('Chưa đăng nhập');
       return;
     }
-    final vperiod = _vperiodController.text.trim();
-    final search = _searchController.text.trim();
-    var url = '$baseUrl/api/inventory';
-    if (vperiod.isNotEmpty || search.isNotEmpty) {
-      final uri = Uri.parse(url).replace(queryParameters: {
-        if (vperiod.isNotEmpty) 'vperiod': vperiod,
-        if (search.isNotEmpty) 'search': search,
-      });
-      url = uri.toString();
-    }
-    EasyLoading.show(status: 'Đang tải...');
+
     setState(() => isLoading = true);
+    EasyLoading.show(status: 'Đang tải toàn bộ dữ liệu để lấy kỳ & kho...');
+
     try {
+      final url = '$baseUrl/api/inventory';  // Không filter gì cả
+      print('Load toàn bộ để lấy kỳ & kho: $url');
+
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 40));
+      if (response.statusCode == 200) {
+        final List<dynamic> rawData = jsonDecode(response.body);
+
+        // Trích xuất kỳ duy nhất
+        final Set<String> periods = {};
+        // Trích xuất kho duy nhất
+        final Map<String, String> rvcMap = {};
+
+        for (var item in rawData) {
+          // Kỳ
+          final period = item['period']?.toString().trim() ?? 
+                         item['Vperiod']?.toString().trim() ?? '';
+          if (period.isNotEmpty && period.length == 6 && RegExp(r'^\d{6}$').hasMatch(period)) {
+            periods.add(period);
+          }
+
+          // Kho
+          final code = item['locationCode']?.toString().trim() ?? 
+                       item['rvc']?.toString().trim() ?? '';
+          final name = item['locationName']?.toString().trim() ?? 'Không xác định';
+          if (code.isNotEmpty) {
+            if (!rvcMap.containsKey(code) || 
+                (rvcMap[code] == 'Không xác định' && name != 'Không xác định')) {
+              rvcMap[code] = name;
+            }
+          }
+        }
+
+        setState(() {
+          // Kỳ: sắp xếp mới nhất trước
+          availablePeriods = periods.toList()..sort((a, b) => b.compareTo(a));
+          if (availablePeriods.isNotEmpty) {
+            selectedPeriod = availablePeriods.first;
+          }
+
+          // Kho: sắp xếp theo mã
+          availableRVCs = rvcMap.entries
+              .map((e) => {'code': e.key, 'name': e.value})
+              .toList()
+            ..sort((a, b) => a['code']!.compareTo(b['code']!));
+
+          // Thêm tùy chọn "Tất cả kho" (null)
+          availableRVCs.insert(0, {'code': '', 'name': 'Tất cả kho'});
+          selectedRVC = '';  // Mặc định là "Tất cả"
+        });
+
+        // Load dữ liệu lần đầu theo kỳ mặc định
+        if (selectedPeriod != null) {
+          _loadInventory();
+        }
+      } else {
+        EasyLoading.showError('Lỗi tải dữ liệu: ${response.statusCode}');
+      }
+    } catch (e) {
+      EasyLoading.showError('Lỗi kết nối: $e');
+      print('Lỗi load all: $e');
+    } finally {
+      EasyLoading.dismiss();
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  // Load danh sách theo filter (kỳ + kho + search)
+  Future<void> _loadInventory() async {
+    if (baseUrl.isEmpty || selectedPeriod == null) return;
+
+    setState(() => isLoading = true);
+    EasyLoading.show(status: 'Đang tải dữ liệu...');
+
+    try {
+      final search = _searchController.text.trim();
+      var url = '$baseUrl/api/inventory';
+      final queryParams = <String, String>{
+        'vperiod': selectedPeriod!,
+      };
+
+      // Chỉ thêm rvc nếu KHÔNG phải "Tất cả"
+      if (selectedRVC != null && selectedRVC!.isNotEmpty) {
+        queryParams['rvc'] = selectedRVC!;
+      }
+
+      if (search.isNotEmpty) {
+        queryParams['search'] = search;
+      }
+
+      if (queryParams.isNotEmpty) {
+        url += '?${Uri(queryParameters: queryParams).query}';
+      }
+
+      print('Thiết lập Hàng hóa gọi: $url');
+
       final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
       if (response.statusCode == 200) {
         final List<dynamic> rawData = jsonDecode(response.body);
@@ -2156,28 +1450,17 @@ class _InventoryImageManagerState extends State<InventoryImageManager> {
                 'imagePath': item['imagePath']?.toString().trim() ?? '',
                 'Vperiod': item['period']?.toString() ?? '',
               }).toList();
-          if (inventoryList.isNotEmpty && _vperiodController.text.trim().isEmpty) {
-            final periods = inventoryList
-                .map((e) => e['Vperiod']?.trim())
-                .where((p) => p != null && p.isNotEmpty)
-                .cast<String>()
-                .toSet()
-                .toList();
-            if (periods.isNotEmpty) {
-              periods.sort((a, b) => b.compareTo(a));
-              _vperiodController.text = periods.first;
-            }
-          }
         });
+      } else {
+        EasyLoading.showError('Lỗi tải: ${response.statusCode}');
       }
     } catch (e) {
       EasyLoading.showError('Lỗi tải dữ liệu: $e');
     } finally {
       EasyLoading.dismiss();
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
-
   Future<void> _pickAndUploadImage(String ivcode) async {
     final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery, maxWidth: 800, imageQuality: 85);
     if (pickedFile == null) return;
@@ -2357,8 +1640,92 @@ Future<void> _printQRsToA4() async {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        // Dropdown kỳ
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: DropdownButtonFormField<String?>(
+            initialValue: selectedPeriod,
+            hint: const Text('Chọn kỳ có dữ liệu'),
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: 'Kỳ (Vperiod)',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+              filled: true,
+              fillColor: Colors.grey[100],
+            ),
+            items: availablePeriods.isEmpty
+                ? [const DropdownMenuItem(value: null, child: Text('Đang tải kỳ...'))]
+                : availablePeriods.map((period) {
+                    return DropdownMenuItem<String>(
+                      value: period,
+                      child: Text(period),
+                    );
+                  }).toList(),
+            onChanged: (value) {
+              setState(() => selectedPeriod = value);
+              if (value != null) _loadInventory();
+            },
+          ),
+        ),
+
+        // Dropdown kho + nút Tìm hết
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: DropdownButtonFormField<String?>(
+                  initialValue: selectedRVC,
+                  hint: const Text('Chọn kho'),
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: 'Kho (RVC)',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                  ),
+                  items: availableRVCs.isEmpty
+                      ? [const DropdownMenuItem(value: null, child: Text('Đang tải kho...'))]
+                      : availableRVCs.map((rvc) {
+                          final display = rvc['code']!.isEmpty 
+                              ? rvc['name']! 
+                              : '${rvc['code']} - ${rvc['name']}';
+                          return DropdownMenuItem<String>(
+                            value: rvc['code'],
+                            child: Text(display, overflow: TextOverflow.ellipsis),
+                          );
+                        }).toList(),
+                  onChanged: (value) {
+                    setState(() => selectedRVC = value);
+                    _loadInventory();
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _searchController.clear();
+                    selectedRVC = '';  // Chọn "Tất cả kho"
+                  });
+                  _loadInventory();  // Load toàn bộ, không filter kho/search
+                },
+                icon: const Icon(Icons.clear_all, size: 20),
+                label: const Text('Tìm hết', style: TextStyle(fontSize: 14)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange.shade700,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Ô tìm kiếm + nút Làm mới
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
               Expanded(
@@ -2491,7 +1858,7 @@ Future<void> _printQRsToA4() async {
   @override
   void dispose() {
     _searchController.dispose();
-    _vperiodController.dispose();
+    
     super.dispose();
   }
 }
@@ -2508,63 +1875,189 @@ class _AssetImageManagerState extends State<AssetImageManager> {
   List<Map<String, String>> assetList = [];
   bool isLoading = false;
   final TextEditingController _searchController = TextEditingController();
-  final ImagePicker _picker = ImagePicker();
 
+  // Dropdown chọn kỳ (tự động lấy từ SQL)
+  String? selectedPeriod;
+  List<String> availablePeriods = [];
+
+  // Dropdown chọn vị trí & phòng ban (tự động lấy từ SQL)
+  String? selectedLocation;               // '' = tất cả vị trí
+  String? selectedDepartment;             // '' = tất cả phòng ban
+  List<Map<String, String>> uniqueLocations = [];
+  List<Map<String, String>> uniqueDepartments = [];
+
+  final ImagePicker _picker = ImagePicker();
   String get baseUrl => AppConfig.baseUrl;
 
   @override
   void initState() {
     super.initState();
+    _loadAllAssets(); // Load toàn bộ để lấy kỳ, vị trí, phòng ban
+  }
+
+  // Load toàn bộ dữ liệu (không filter) để lấy danh sách kỳ, vị trí, phòng ban
+  Future<void> _loadAllAssets() async {
+    if (baseUrl.isEmpty) {
+      EasyLoading.showError('Chưa đăng nhập');
+      return;
+    }
+
+    setState(() => isLoading = true);
+    EasyLoading.show(status: 'Đang tải toàn bộ TSCĐ để lấy kỳ, vị trí, phòng ban...');
+
+    try {
+      final url = '$baseUrl/api/asset-physical/get'; // Không filter gì cả
+      print('Load toàn bộ TSCĐ để lấy filter: $url');
+
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 40));
+      if (response.statusCode == 200) {
+        final List<dynamic> rawData = jsonDecode(response.body);
+
+        // Trích xuất kỳ duy nhất
+        final Set<String> periods = {};
+        // Trích xuất vị trí duy nhất
+        final Map<String, String> locMap = {};
+        // Trích xuất phòng ban duy nhất
+        final Map<String, String> deptMap = {};
+
+        for (var item in rawData) {
+          // Kỳ
+          final period = item['Vperiod']?.toString().trim() ?? '';
+          if (period.isNotEmpty && period.length == 6 && RegExp(r'^\d{6}$').hasMatch(period)) {
+            periods.add(period);
+          }
+
+          // Vị trí
+          final locCode = item['LocationCode']?.toString().trim() ?? '';
+          final locName = item['LocationName']?.toString().trim() ?? 'Không xác định';
+          if (locCode.isNotEmpty) {
+            if (!locMap.containsKey(locCode) || (locMap[locCode] == 'Không xác định' && locName != 'Không xác định')) {
+              locMap[locCode] = locName;
+            }
+          }
+
+          // Phòng ban
+          final deptCode = item['DepartmentCode']?.toString().trim() ?? '';
+          final deptName = item['DepartmentName']?.toString().trim() ?? 'Chưa có tên';
+          if (deptCode.isNotEmpty) {
+            if (!deptMap.containsKey(deptCode) || (deptMap[deptCode] == 'Chưa có tên' && deptName != 'Chưa có tên')) {
+              deptMap[deptCode] = deptName;
+            }
+          }
+        }
+
+        setState(() {
+          // Kỳ
+          availablePeriods = periods.toList()..sort((a, b) => b.compareTo(a));
+          if (availablePeriods.isNotEmpty) {
+            selectedPeriod = availablePeriods.first;
+          }
+
+          // Vị trí
+          uniqueLocations = locMap.entries
+              .map((e) => {'code': e.key, 'name': e.value})
+              .toList()
+            ..sort((a, b) => a['code']!.compareTo(b['code']!));
+          uniqueLocations.insert(0, {'code': '', 'name': 'Tất cả vị trí'});
+          selectedLocation = '';
+
+          // Phòng ban
+          uniqueDepartments = deptMap.entries
+              .map((e) => {'code': e.key, 'name': e.value})
+              .toList()
+            ..sort((a, b) => a['code']!.compareTo(b['code']!));
+          uniqueDepartments.insert(0, {'code': '', 'name': 'Tất cả phòng ban'});
+          selectedDepartment = '';
+        });
+
+        // Load dữ liệu lần đầu (toàn bộ hoặc theo kỳ mặc định)
+        _loadAssets();
+      } else {
+        EasyLoading.showError('Lỗi tải toàn bộ: ${response.statusCode}');
+      }
+    } catch (e) {
+      EasyLoading.showError('Lỗi kết nối: $e');
+      print('Lỗi load all TSCĐ: $e');
+    } finally {
+      EasyLoading.dismiss();
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  // Load danh sách TSCĐ theo filter (kỳ + vị trí + phòng ban + tìm kiếm)
+  Future<void> _loadAssets() async {
+    if (baseUrl.isEmpty) {
+      EasyLoading.showError('Chưa đăng nhập');
+      return;
+    }
+
+    setState(() => isLoading = true);
+    EasyLoading.show(status: 'Đang tải danh sách TSCĐ...');
+
+    try {
+      var url = '$baseUrl/api/asset-physical/get';
+      final queryParams = <String, String>{};
+
+      // Kỳ (nếu có chọn)
+      if (selectedPeriod != null && selectedPeriod!.isNotEmpty) {
+        queryParams['vperiod'] = selectedPeriod!;
+      }
+
+      // Vị trí (nếu không phải "Tất cả")
+      if (selectedLocation != null && selectedLocation!.isNotEmpty) {
+        queryParams['locationCode'] = selectedLocation!;
+      }
+
+      // Phòng ban (nếu không phải "Tất cả")
+      if (selectedDepartment != null && selectedDepartment!.isNotEmpty) {
+        queryParams['departmentCode'] = selectedDepartment!;
+      }
+
+      // Tìm kiếm mã/tên
+      final search = _searchController.text.trim();
+      if (search.isNotEmpty) {
+        queryParams['assetClassName'] = search;
+      }
+
+      if (queryParams.isNotEmpty) {
+        url += '?${Uri(queryParameters: queryParams).query}';
+      }
+
+      print('Thiết lập TSCĐ gọi: $url');
+
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
+      if (response.statusCode == 200) {
+        final List<dynamic> rawData = jsonDecode(response.body);
+        setState(() {
+          assetList = rawData.map<Map<String, String>>((item) => {
+                'AssetClassCode': item['AssetClassCode']?.toString().trim() ?? '',
+                'AssetClassName': item['AssetClassName']?.toString().trim() ?? 'Không tên',
+                'imagePath': item['imagePath']?.toString().trim() ?? '',
+              }).toList();
+        });
+      } else {
+        EasyLoading.showError('Lỗi server: ${response.statusCode}');
+        print('Response body: ${response.body}');
+      }
+    } catch (e) {
+      EasyLoading.showError('Không thể tải dữ liệu: $e');
+      print('Lỗi chi tiết: $e');
+    } finally {
+      EasyLoading.dismiss();
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  // Nút "Tìm hết" - xem toàn bộ, không filter
+  void _clearFiltersAndReload() {
+    setState(() {
+      selectedPeriod = availablePeriods.isNotEmpty ? availablePeriods.first : null;
+      selectedLocation = '';
+      selectedDepartment = '';
+      _searchController.clear();
+    });
     _loadAssets();
   }
-
-  Future<void> _loadAssets() async {
-  if (baseUrl.isEmpty) {
-    EasyLoading.showError('Chưa đăng nhập hoặc baseUrl rỗng');
-    return;
-  }
-
-  EasyLoading.show(status: 'Đang tải danh sách tài sản...');
-  setState(() => isLoading = true);
-
-  try {
-    // Endpoint ĐÚNG giống tab Cập nhật QR
-    var url = '$baseUrl/api/asset-physical/get';
-
-    // Hỗ trợ tìm kiếm (nếu người dùng nhập vào ô search)
-    final search = _searchController.text.trim();
-    if (search.isNotEmpty) {
-      url += '?assetClassName=${Uri.encodeComponent(search)}';
-    }
-
-    print('AssetImageManager gọi API: $url'); // Debug quan trọng
-
-    final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
-
-    print('Status: ${response.statusCode} | Body (đầu): ${response.body.substring(0, response.body.length.clamp(0, 500))}...');
-
-    if (response.statusCode == 200) {
-      final List<dynamic> rawData = jsonDecode(response.body);
-      setState(() {
-        assetList = rawData.map<Map<String, String>>((item) => {
-          'AssetClassCode': item['AssetClassCode']?.toString().trim() ?? '',
-          'AssetClassName': item['AssetClassName']?.toString().trim() ?? 'Không tên',
-          'imagePath': item['imagePath']?.toString().trim() ?? '', // Nếu backend trả imagePath
-        }).toList();
-      });
-      print('Tải được ${assetList.length} tài sản');
-    } else {
-      EasyLoading.showError('Lỗi server: ${response.statusCode}');
-      print('Lỗi response: ${response.body}');
-    }
-  } catch (e) {
-    print('Lỗi tải tài sản (AssetImageManager): $e');
-    EasyLoading.showError('Không thể tải dữ liệu: $e');
-  } finally {
-    EasyLoading.dismiss();
-    setState(() => isLoading = false);
-  }
-}
 
   Future<void> _pickAndUploadImage(String assetCode) async {
     final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery, maxWidth: 800, imageQuality: 85);
@@ -2681,44 +2174,156 @@ class _AssetImageManagerState extends State<AssetImageManager> {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        // Dropdown kỳ
         Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: DropdownButtonFormField<String?>(
+            initialValue: selectedPeriod,
+            hint: const Text('Chọn kỳ có dữ liệu'),
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: 'Kỳ (Vperiod)',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+              filled: true,
+              fillColor: Colors.grey[100],
+            ),
+            items: availablePeriods.isEmpty
+                ? [const DropdownMenuItem(value: null, child: Text('Đang tải kỳ...'))]
+                : availablePeriods.map((period) {
+                    return DropdownMenuItem<String>(
+                      value: period,
+                      child: Text(period),
+                    );
+                  }).toList(),
+            onChanged: (value) {
+              setState(() => selectedPeriod = value);
+              _loadAssets();
+            },
+          ),
+        ),
+
+        // Dropdown vị trí + phòng ban + nút Tìm hết
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: Column(
             children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Tìm mã hoặc tên tài sản...',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-                    filled: true,
-                    fillColor: Colors.grey[100],
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String?>(
+                      initialValue: selectedLocation,
+                      hint: const Text('Chọn vị trí'),
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Vị trí',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                      ),
+                      items: uniqueLocations.isEmpty
+                          ? [const DropdownMenuItem(value: null, child: Text('Đang tải...'))]
+                          : uniqueLocations.map((loc) {
+                              final display = loc['code']!.isEmpty
+                                  ? loc['name']!
+                                  : '${loc['code']} - ${loc['name']}';
+                              return DropdownMenuItem<String>(
+                                value: loc['code'],
+                                child: Text(display, overflow: TextOverflow.ellipsis),
+                              );
+                            }).toList(),
+                      onChanged: (value) {
+                        setState(() => selectedLocation = value);
+                        _loadAssets();
+                      },
+                    ),
                   ),
-                  onChanged: (_) => setState(() {}),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String?>(
+                      initialValue: selectedDepartment,
+                      hint: const Text('Chọn phòng ban'),
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Phòng ban',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                      ),
+                      items: uniqueDepartments.isEmpty
+                          ? [const DropdownMenuItem(value: null, child: Text('Đang tải...'))]
+                          : uniqueDepartments.map((dept) {
+                              final display = dept['code']!.isEmpty
+                                  ? dept['name']!
+                                  : '${dept['code']} - ${dept['name']}';
+                              return DropdownMenuItem<String>(
+                                value: dept['code'],
+                                child: Text(display, overflow: TextOverflow.ellipsis),
+                              );
+                            }).toList(),
+                      onChanged: (value) {
+                        setState(() => selectedDepartment = value);
+                        _loadAssets();
+                      },
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: _loadAssets,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Làm mới'),
-                style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 146, 122, 187)),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.clear_all),
+                      label: const Text('Tìm hết (toàn bộ)'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange.shade700,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: _clearFiltersAndReload,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  IconButton(
+                    icon: const Icon(Icons.refresh, color: Colors.deepPurple),
+                    tooltip: 'Tải lại toàn bộ',
+                    onPressed: _loadAssets,
+                  ),
+                ],
               ),
             ],
           ),
         ),
+
+        // Ô tìm kiếm mã/tên
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Tìm mã hoặc tên tài sản...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+              filled: true,
+              fillColor: Colors.grey[100],
+            ),
+            onChanged: (_) => _loadAssets(),
+          ),
+        ),
+
+        // Danh sách TSCĐ
         Expanded(
           child: isLoading
               ? const Center(child: CircularProgressIndicator())
               : assetList.isEmpty
-                  ? const Center(child: Text('Không có dữ liệu', style: TextStyle(fontSize: 18)))
+                  ? const Center(child: Text('Không có dữ liệu cho bộ lọc này', style: TextStyle(fontSize: 18)))
                   : ListView.builder(
                       itemCount: assetList.length,
                       itemBuilder: (context, index) {
                         final item = assetList[index];
                         final code = item['AssetClassCode'] ?? '';
                         final name = item['AssetClassName'] ?? '';
+
                         return Card(
                           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           elevation: 6,
@@ -2778,6 +2383,8 @@ class _AssetImageManagerState extends State<AssetImageManager> {
                       },
                     ),
         ),
+
+        // Nút Tạo QR & In QR
         Padding(
           padding: const EdgeInsets.all(16),
           child: ElevatedButton.icon(
@@ -2792,19 +2399,19 @@ class _AssetImageManagerState extends State<AssetImageManager> {
           ),
         ),
         Padding(
-  padding: const EdgeInsets.all(16),
-  child: ElevatedButton.icon(
-    onPressed: _printQRsToA4,
-    icon: const Icon(Icons.print, size: 28),
-    label: const Text('In QR ra giấy A4', style: TextStyle(fontSize: 18)),
-    style: ElevatedButton.styleFrom(
-      backgroundColor: const Color.fromARGB(55, 33, 8, 218),
-      foregroundColor: Colors.white,
-      minimumSize: const Size.fromHeight(60),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    ),
-  ),
-),
+          padding: const EdgeInsets.all(16),
+          child: ElevatedButton.icon(
+            onPressed: _printQRsToA4,
+            icon: const Icon(Icons.print, size: 28),
+            label: const Text('In QR ra giấy A4', style: TextStyle(fontSize: 18)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color.fromARGB(55, 33, 8, 218),
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(60),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -3000,6 +2607,7 @@ class InventoryPhysicalTab extends StatefulWidget {
 }
 
 class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
+  
   final MobileScannerController cameraController = MobileScannerController(
     facing: CameraFacing.back,
     torchEnabled: false,
@@ -3013,7 +2621,7 @@ class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
   List<TextEditingController> physicalControllers = [];
 
   String selectedVperiod = '';
-  String selectedRVC = '';
+  String selectedRVC = '110';
 
   String get baseUrl => AppConfig.baseUrl;
 
@@ -3047,6 +2655,11 @@ class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
   }
 
   Future<void> _loadAllData() async {
+
+    if (selectedRVC.isEmpty) {
+    selectedRVC = '110';
+  }
+
     if (baseUrl.isEmpty) {
       EasyLoading.showError('Chưa đăng nhập hoặc mất kết nối');
       return;
@@ -3409,8 +3022,8 @@ class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
                       labelText: 'Kho (RVC)',
                       border: OutlineInputBorder(),
                     ),
-                    initialValue: selectedRVC.isEmpty ? null : selectedRVC, // ← Fix deprecated 'value'
-                    hint: const Text('Chọn kho...'),
+                    initialValue: selectedRVC.isEmpty ? null : selectedRVC,  // Nếu rỗng thì null → hiển thị hint
+                     hint: const Text('Chọn kho (mặc định 110)'),
                     isExpanded: true,
                     items: () {
                       final Map<String, String> uniqueRVC = {};
@@ -3423,6 +3036,9 @@ class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
                           uniqueRVC[code] = name;
                         }
                       }
+                      if (!uniqueRVC.containsKey('110')) {
+                      uniqueRVC['110'] = 'Kho 110 (mặc định)';
+                    }
                       return uniqueRVC.entries.map((entry) {
                         final rvcCode = entry.key;
                         final rvcName = entry.value;
@@ -3440,7 +3056,7 @@ class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
                       }).toList();
                     }(),
                     onChanged: (val) {
-                      setState(() => selectedRVC = val ?? '');
+                      setState(() => selectedRVC = val ?? '110');
                       _applyFilter();
                     },
                   ),
@@ -3554,7 +3170,7 @@ class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
                                   ElevatedButton(
                                     onPressed: () => _saveSingle(i),
                                     style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 97, 66, 222)),
-                                    child: const Text('Lưu dòng này'),
+                                    child: const Text('Lưu'),
                                   ),
                                 ],
                               ),
@@ -3618,6 +3234,7 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
   bool _isScanning = false;
   String? _scanMessage;
   bool _isLoading = false;
+  bool _isFirstLoad = true;
 
   List<Map<String, dynamic>> assets = [];
   List<TextEditingController> vphisControllers = [];
@@ -3625,8 +3242,9 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
   String _currentVPeriod = '';
   final TextEditingController _vPeriodController = TextEditingController();
 
-  String selectedLocation = '';
-  String selectedDepartment = '';
+  // Khai báo nullable
+  String? selectedLocation;
+  String? selectedDepartment;
 
   List<Map<String, String>> uniqueLocations = [];
   List<Map<String, String>> uniqueDepartments = [];
@@ -3639,24 +3257,66 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
   void initState() {
     super.initState();
 
-    // Tự động điền năm-tháng hiện tại (YYYYMM)
-    final now = DateTime.now();
-    _currentVPeriod = '${now.year}${now.month.toString().padLeft(2, '0')}';
-    _vPeriodController.text = _currentVPeriod;
+    
 
-    _loadAssets();
+    // Tự động lấy GLPeriod mới nhất và load dữ liệu
+    _initGLPeriodAndLoad();
+
     loadUniqueLocations();
     loadUniqueDepartments();
   }
 
+  // Hàm lấy GLPeriod mới nhất và load dữ liệu
+  Future<void> _initGLPeriodAndLoad() async {
+  String? latestPeriod = await fetchLatestPeriod('asset');
+  if (latestPeriod != null && latestPeriod.length == 6) {
+    _currentVPeriod = latestPeriod;
+    _vPeriodController.text = latestPeriod;
+  } else {
+    final now = DateTime.now();
+    _currentVPeriod = '${now.year}${now.month.toString().padLeft(2, '0')}';
+    _vPeriodController.text = _currentVPeriod;
+  }
+
+  // Load danh sách vị trí + phòng ban (chạy song song)
+  await Future.wait([
+    loadUniqueLocations(),
+    loadUniqueDepartments(),
+  ]);
+
+  // Quan trọng: Lần đầu tiên → BUỘC filter theo phòng ban 110 hoặc vị trí 900
+  if (_isFirstLoad) {
+  // Chỉ gán nếu thực sự tồn tại
+  if (uniqueDepartments.any((d) => d['code'] == '110')) {
+    selectedDepartment = '110';
+    selectedLocation = null;
+  } 
+  else if (uniqueLocations.any((l) => l['code'] == '900')) {
+    selectedLocation = '900';
+    selectedDepartment = null;
+  } 
+  else if (uniqueLocations.any((l) => l['code'] == '800')) {
+    selectedLocation = '800';
+    selectedDepartment = null;
+  } 
+  else {
+    // Không có giá trị mặc định hợp lệ → để null
+    selectedLocation = null;
+    selectedDepartment = null;
+  }
+  _isFirstLoad = false;
+}
+
+  // Load dữ liệu với filter đã thiết lập
+  await _loadAssets();
+}
+
   // Load danh sách vị trí duy nhất
   Future<void> loadUniqueLocations() async {
     if (baseUrl.isEmpty) return;
-
     try {
       final url = '$baseUrl/api/asset-phish/get';
       final response = await http.get(Uri.parse(url));
-
       if (response.statusCode == 200) {
         final List<dynamic> rawData = jsonDecode(response.body);
         final Map<String, String> locMap = {};
@@ -3664,7 +3324,6 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
         for (var item in rawData) {
           final code = (item['LocationCode'] ?? '').toString().trim();
           String name = (item['LocationName'] ?? 'Không tên').toString().trim();
-
           if (code.isNotEmpty) {
             if (!locMap.containsKey(code) || (locMap[code] == 'Không tên' && name != 'Không tên')) {
               locMap[code] = name;
@@ -3672,10 +3331,20 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
           }
         }
 
-        uniqueLocations = locMap.entries.map((e) => {'code': e.key, 'name': e.value}).toList()
-          ..sort((a, b) => a['code']!.compareTo(b['code']!));
+        if (mounted) {
+          setState(() {
+            uniqueLocations = locMap.entries
+                .map((e) => {'code': e.key, 'name': e.value})
+                .toList()
+              ..sort((a, b) => a['code']!.compareTo(b['code']!));
 
-        setState(() {});
+            // Giữ nguyên giá trị mặc định '900' nếu có trong danh sách
+            // Nếu không có → vẫn giữ '900' (không đổi về null để tránh lỗi)
+            if (!uniqueLocations.any((loc) => loc['code'] == '900')) {
+              print('Cảnh báo: Vị trí 900 không tồn tại trong API');
+            }
+          });
+        }
       }
     } catch (e) {
       print('Lỗi tải location: $e');
@@ -3685,11 +3354,9 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
   // Load danh sách phòng ban duy nhất
   Future<void> loadUniqueDepartments() async {
     if (baseUrl.isEmpty) return;
-
     try {
       final url = '$baseUrl/api/asset-phish/get';
       final response = await http.get(Uri.parse(url));
-
       if (response.statusCode == 200) {
         final List<dynamic> rawData = jsonDecode(response.body);
         final Map<String, String> deptMap = {};
@@ -3697,9 +3364,6 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
         for (var item in rawData) {
           final code = (item['DepartmentCode'] ?? '').toString().trim();
           String name = (item['DepartmentName'] ?? 'Chưa có tên').toString().trim();
-
-          print('Department: Code=$code, Name=$name');
-
           if (code.isNotEmpty) {
             if (!deptMap.containsKey(code) || (deptMap[code] == 'Chưa có tên' && name != 'Chưa có tên')) {
               deptMap[code] = name;
@@ -3707,11 +3371,19 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
           }
         }
 
-        uniqueDepartments = deptMap.entries.map((e) => {'code': e.key, 'name': e.value}).toList()
-          ..sort((a, b) => a['code']!.compareTo(b['code']!));
+        if (mounted) {
+          setState(() {
+            uniqueDepartments = deptMap.entries
+                .map((e) => {'code': e.key, 'name': e.value})
+                .toList()
+              ..sort((a, b) => a['code']!.compareTo(b['code']!));
 
-        print('Tổng phòng ban duy nhất: ${uniqueDepartments.length}');
-        setState(() {});
+            // Giữ nguyên giá trị mặc định '110' nếu có trong danh sách
+            if (!uniqueDepartments.any((dept) => dept['code'] == '110')) {
+              print('Cảnh báo: Phòng ban 110 không tồn tại trong API');
+            }
+          });
+        }
       }
     } catch (e) {
       print('Lỗi tải department: $e');
@@ -3719,79 +3391,90 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
   }
 
   Future<void> _loadAssets() async {
-    if (baseUrl.isEmpty) {
-      EasyLoading.showError('Chưa đăng nhập');
-      return;
-    }
-
-    setState(() => _isLoading = true);
-    EasyLoading.show(status: 'Đang tải danh sách tài sản...');
-
-    try {
-      var url = '$baseUrl/api/asset-phish/get';
-      final queryParams = <String, String>{};
-
-      final assetClassCode = _assetCodeController.text.trim();
-      if (assetClassCode.isNotEmpty) {
-        queryParams['assetClassName'] = assetClassCode;
-      }
-
-      if (selectedDepartment.isNotEmpty) {
-        queryParams['departmentCode'] = selectedDepartment;
-      }
-
-      if (selectedLocation.isNotEmpty) {
-        queryParams['locationCode'] = selectedLocation;
-      }
-
-      if (queryParams.isNotEmpty) {
-        url += '?${Uri(queryParameters: queryParams).query}';
-      }
-
-      print('Gọi API: $url');
-
-      final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
-
-      if (res.statusCode == 200) {
-        final List<dynamic> rawData = jsonDecode(res.body);
-
-        setState(() {
-          assets = rawData.map((e) {
-            final map = Map<String, dynamic>.from(e);
-            return {
-              'AssetClassCode': map['AssetClassCode']?.toString().trim() ?? '',
-              'AssetClassName': map['AssetClassName']?.toString().trim() ?? 'Không tên',
-              'DepartmentCode': map['DepartmentCode']?.toString().trim() ?? '',
-              'DepartmentName': map['DepartmentName']?.toString().trim() ?? 'Chưa có',
-              'LocationCode': map['LocationCode']?.toString().trim() ?? '',
-              'SlvgQty': map['SlvgQty']?.toString() ?? '0',
-              'PhisUser': map['PhisUser']?.toString().trim() ?? 'Chưa có',
-              'Vphis': map['Vphis']?.toString() ?? '0',
-              'CreatedDate': map['CreatedDate'] ?? 'Chưa kiểm kê',
-            };
-          }).toList();
-
-          vphisControllers = List.generate(assets.length, (i) {
-            final ctrl = TextEditingController();
-            final vphis = assets[i]['Vphis'] ?? '0';
-            ctrl.text = formatCleanQty(vphis);
-            return ctrl;
-          });
-        });
-
-        print('Tải được ${assets.length} tài sản');
-      } else {
-        EasyLoading.showError('Lỗi tải: ${res.statusCode}');
-      }
-    } catch (e) {
-      print('Lỗi: $e');
-      EasyLoading.showError('Không thể tải dữ liệu');
-    } finally {
-      EasyLoading.dismiss();
-      setState(() => _isLoading = false);
-    }
+  if (baseUrl.isEmpty) {
+    EasyLoading.showError('Chưa đăng nhập');
+    return;
   }
 
+  setState(() => _isLoading = true);
+  EasyLoading.show(status: 'Đang tải danh sách tài sản...');
+
+  try {
+    var url = '$baseUrl/api/asset-phish/get';
+    final queryParams = <String, String>{};
+
+    // Kỳ kiểm kê (luôn gửi nếu có)
+    final periodToSend = _vPeriodController.text.trim().isNotEmpty
+        ? _vPeriodController.text.trim()
+        : _currentVPeriod;
+    if (periodToSend.isNotEmpty) {
+      queryParams['vperiod'] = periodToSend;
+    }
+
+    // Mã TS/CCDC (nếu có)
+    final assetClassCode = _assetCodeController.text.trim();
+    if (assetClassCode.isNotEmpty) {
+      queryParams['assetClassName'] = assetClassCode;
+    }
+
+    // Chỉ gửi filter phòng ban HOẶC vị trí nếu có giá trị
+    // KHÔNG ép mặc định nữa
+    if (selectedDepartment?.isNotEmpty == true) {
+      queryParams['departmentCode'] = selectedDepartment!;
+    }
+    if (selectedLocation?.isNotEmpty == true) {
+      queryParams['locationCode'] = selectedLocation!;
+    }
+
+    // Nếu có filter thì thêm vào URL
+    if (queryParams.isNotEmpty) {
+      url += '?${Uri(queryParameters: queryParams).query}';
+    }
+
+    print('Gọi API TSCĐ: $url (kỳ: $periodToSend, PB: $selectedDepartment, VT: $selectedLocation)');
+
+    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
+
+    if (res.statusCode == 200) {
+      final List<dynamic> rawData = jsonDecode(res.body);
+
+      setState(() {
+        assets = rawData.map((e) {
+          final map = Map<String, dynamic>.from(e);
+          return {
+            'AssetClassCode': map['AssetClassCode']?.toString().trim() ?? '',
+            'AssetItemCode': map['AssetItemCode']?.toString().trim() ?? '',
+            'AssetClassName': map['AssetClassName']?.toString().trim() ?? 'Không tên',
+            'DepartmentCode': map['DepartmentCode']?.toString().trim() ?? '',
+            'DepartmentName': map['DepartmentName']?.toString().trim() ?? 'Chưa có',
+            'LocationCode': map['LocationCode']?.toString().trim() ?? '',
+            'SlvgQty': map['SlvgQty']?.toString() ?? '0',
+            'PhisUser': map['PhisUser']?.toString().trim() ?? 'Chưa có',
+            'Vphis': map['Vphis']?.toString() ?? '0',
+            'CreatedDate': map['CreatedDate'] ?? 'Chưa kiểm kê',
+          };
+        }).toList();
+
+        vphisControllers = List.generate(assets.length, (i) {
+          final ctrl = TextEditingController();
+          final vphis = assets[i]['Vphis'] ?? '0';
+          ctrl.text = formatCleanQty(vphis);
+          return ctrl;
+        });
+      });
+
+      print('Tải được ${assets.length} tài sản');
+    } else {
+      EasyLoading.showError('Lỗi tải: ${res.statusCode}');
+    }
+  } catch (e) {
+    print('Lỗi tải tài sản: $e');
+    EasyLoading.showError('Không thể tải dữ liệu');
+  } finally {
+    EasyLoading.dismiss();
+    if (mounted) setState(() => _isLoading = false);
+  }
+}
   Future<void> _saveVphis(int index) async {
     final item = assets[index];
     final vphisStr = vphisControllers[index].text.trim().replaceAll(',', '.');
@@ -3956,6 +3639,7 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
 
     final saveData = {
       'AssetClassCode': code,
+      'AssetItemCode': item['AssetItemCode'] ?? '',
       'Vend': double.tryParse(slvgQty.toString().replaceAll(',', '.')) ?? 0.0,
       'Vphis': vphis,
       'LocationCode': location,
@@ -4053,18 +3737,18 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: selectedLocation.isEmpty ? null : selectedLocation,
-                          hint: const Text('Chọn vị trí'),
-                          isExpanded: true,
-                          decoration: InputDecoration(
-                            labelText: 'Vị trí',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-                            filled: true,
-                            fillColor: Colors.grey[100],
-                            prefixIcon: const Icon(Icons.location_on, color: Colors.deepPurple),
-                          ),
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  initialValue: selectedLocation, // cho phép null
+                              hint: const Text('Chọn vị trí'),
+                              isExpanded: true,
+                              decoration: InputDecoration(
+                                labelText: 'Vị trí',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                                filled: true,
+                                fillColor: Colors.grey[100],
+                                prefixIcon: const Icon(Icons.location_on, color: Colors.deepPurple),
+                              ),
                           items: uniqueLocations.isEmpty
                               ? [const DropdownMenuItem(value: null, child: Text('Đang tải...'))]
                               : uniqueLocations.map((loc) {
@@ -4077,9 +3761,13 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
                                     child: Text(display, overflow: TextOverflow.ellipsis),
                                   );
                                 }).toList(),
-                          onChanged: (value) {
-                            setState(() => selectedLocation = value ?? '');
-                            _loadAssets();
+                                          onChanged: (value) {
+                    setState(() {
+                      selectedLocation = value;
+                      // Nếu chọn vị trí → bỏ phòng ban để tránh xung đột filter
+                      selectedDepartment = null;
+                    });
+               _loadAssets();
                           },
                         ),
                       ),
@@ -4090,16 +3778,16 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
                     children: [
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          initialValue: selectedDepartment.isEmpty ? null : selectedDepartment,
-                          hint: const Text('Chọn phòng ban'),
-                          isExpanded: true,
-                          decoration: InputDecoration(
-                            labelText: 'Phòng ban',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-                            filled: true,
-                            fillColor: Colors.grey[100],
-                            prefixIcon: const Icon(Icons.business, color: Colors.deepPurple),
-                          ),
+                                        initialValue: selectedDepartment,  // cho phép null
+                hint: const Text('Chọn phòng ban'),
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: 'Phòng ban',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                  filled: true,
+                  fillColor: Colors.grey[100],
+                  prefixIcon: const Icon(Icons.business, color: Colors.deepPurple),
+                ),
                           items: uniqueDepartments.isEmpty
                               ? [const DropdownMenuItem(value: null, child: Text('Đang tải...'))]
                               : uniqueDepartments.map((dept) {
@@ -4141,6 +3829,22 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
                           onPressed: _isLoading ? null : _loadAssets,
                         ),
                       ),
+                                          ElevatedButton.icon(
+                      icon: const Icon(Icons.clear_all),
+                      label: const Text('Xem tất cả'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey.shade700,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          selectedDepartment = null;
+                          selectedLocation = null;
+                          _assetCodeController.clear();
+                        });
+                        _loadAssets();
+                      },
+                    ),
                       const SizedBox(width: 12),
                       IconButton(
                         icon: const Icon(Icons.refresh, color: Colors.deepPurple),

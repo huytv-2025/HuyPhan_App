@@ -37,12 +37,22 @@ public async Task<IActionResult> GetAssetPhysical(
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
+// Bước 1: Lấy GLPeriod mới nhất từ GlobPara (vì endpoint này không có vperiod)
+                string filterVPeriod;
+                const string getLatestSql = @"
+                    SELECT TOP 1 ParaStr         
+                    FROM GlobPara 
+                   WHERE ParaName = 'GLPeriod'";  // Thêm ORDER BY nếu cần lấy kỳ lớn nhất
 
+                await using var cmdLatest = new SqlCommand(getLatestSql, connection);
+                var latest = await cmdLatest.ExecuteScalarAsync();
+                filterVPeriod = latest?.ToString()?.Trim() ?? DateTime.Now.ToString("yyyyMM"); // Fallback
         var sql = @"
             SET NOCOUNT ON;
             SELECT 
                  a.AssetClassCode,
-                LTRIM(RTRIM(a.AssetClassName)) AS AssetClassName,
+                 a.AssetItemCode,
+                dbo.fTCVNToUnicode(LTRIM(RTRIM(a.AssetClassName))) AS AssetClassName,
                 LTRIM(RTRIM(a.DepartmentCode)) AS DepartmentCode,
                 LTRIM(RTRIM(a.LocationCode)) AS LocationCode,
                 dbo.fTCVNToUnicode(d.RVCName) AS LocationName, 
@@ -86,6 +96,7 @@ public async Task<IActionResult> GetAssetPhysical(
             results.Add(new Dictionary<string, object>
             {
                 ["AssetClassCode"]  = reader.GetSafeString("AssetClassCode"),
+                ["AssetItemCode"]   = reader.GetSafeString("AssetItemCode"),
                 ["AssetClassName"]  = reader.GetSafeString("AssetClassName") ?? "Không tên",
                 ["DepartmentCode"] = reader.GetSafeString("DepartmentCode"),
                 ["DepartmentName"] = reader.GetSafeString("DepartmentName"),
@@ -127,6 +138,7 @@ public async Task<IActionResult> GetAssetPhysical(
                     IF EXISTS (
                         SELECT 1 FROM QRAssetPhisical 
                         WHERE AssetClassCode = @AssetClassCode 
+                        AND AssetItemCode = @AssetItemCode
                           AND Vperiod = @Vperiod 
                           AND ISNULL(LocationCode, '') = ISNULL(@LocationCode, '')
                     )
@@ -141,17 +153,18 @@ public async Task<IActionResult> GetAssetPhysical(
                             IsActive = 1
                         WHERE 
                             AssetClassCode = @AssetClassCode 
+                            AND AssetItemCode = @AssetItemCode
                             AND Vperiod = @Vperiod 
                             AND ISNULL(LocationCode, '') = ISNULL(@LocationCode, '')
                     END
                     ELSE
                     BEGIN
                         INSERT INTO QRAssetPhisical (
-                            AssetClassCode, Vend, Vphis, LocationCode, DepartmentCode, 
+                            AssetClassCode,AssetItemCode, Vend, Vphis, LocationCode, DepartmentCode, 
                             Vperiod, CreatedDate, CreatedBy, IsActive
                         )
                         VALUES (
-                            @AssetClassCode, @Vend, @Vphis, @LocationCode, @DepartmentCode,
+                            @AssetClassCode,@AssetItemCode, @Vend, @Vphis, @LocationCode, @DepartmentCode,
                             @Vperiod, GETDATE(), @CreatedBy, 1
                         );
                     END";
@@ -164,6 +177,7 @@ public async Task<IActionResult> GetAssetPhysical(
                     await using var cmd = new SqlCommand(sql, connection, transaction);
 
                     cmd.Parameters.AddWithValue("@AssetClassCode", item.AssetClassCode.Trim());
+                    cmd.Parameters.AddWithValue("@AssetItemCode", item.AssetItemCode?.Trim() ?? (object)DBNull.Value);   // ← THÊM
                     cmd.Parameters.AddWithValue("@Vend", item.Vend);
                     cmd.Parameters.AddWithValue("@Vphis", item.Vphis);
                     cmd.Parameters.AddWithValue("@LocationCode", item.LocationCode?.Trim() ?? (object)DBNull.Value);
@@ -217,15 +231,15 @@ public async Task<IActionResult> GetAssetPhysical(
                 const string sql = @"
                     SELECT 
                         a.AssetClassCode,
-                        LTRIM(RTRIM(a.AssetClassName)) AS AssetClassName,
-                        LTRIM(RTRIM(a.DepartmentCode)) AS DepartmentCode,
+                        dbo.fTCVNToUnicode(LTRIM(RTRIM(a.AssetClassName))() AS AssetClassName,
+                        dbo.fTCVNToUnicode(LTRIM(RTRIM(a.DepartmentCode))) AS DepartmentCode,
                         LTRIM(RTRIM(a.LocationCode)) AS LocationCode,
                         ISNULL(a.SlvgQty, 0) AS SlvgQty,
                         LTRIM(RTRIM(a.PhisLoc)) AS PhisLoc,
                         LTRIM(RTRIM(a.PhisUser)) AS PhisUser,
                         q.ImagePath
                     FROM AssetItem a
-                    LEFT JOIN QRAsset q ON a.AssetClassCode = q.AssetClassCode
+                    LEFT JOIN QRAsset q ON a.AssetClassCode = q.AssetClassCode and a.AssetItemCode=q.AssetItemCode
                     WHERE a.AssetClassCode = @AssetClassCode";
 
                 await using var cmd = new SqlCommand(sql, connection);
@@ -273,63 +287,72 @@ public async Task<IActionResult> GetAssetPhysical(
 
         // HÀM TẠO QR HÀNG LOẠT - Đã đặt đúng vị trí BÊN TRONG CLASS
         [HttpPost("generate-batch")]
-        public async Task<IActionResult> GenerateBatchQR([FromBody] GenerateBatchRequest request)
+public async Task<IActionResult> GenerateBatchQR([FromBody] GenerateBatchRequest request)
+{
+    if (request?.Codes == null || request.Codes.Count == 0)
+        return BadRequest(new { success = false, message = "Danh sách mã tài sản rỗng" });
+
+    try
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        int insertedCount = 0;
+
+        const string sql = @"
+    INSERT INTO QRAsset (
+        AssetClassCode,
+        AssetItemCode,
+        DepartmentCode,
+        LocationCode,
+        QRCode,
+        CreatedDate,
+        CreatedBy,
+        ImagePath
+    )
+    SELECT 
+        a.AssetClassCode,
+        a.AssetItemCode,
+        a.DepartmentCode,
+        a.LocationCode,
+        CONCAT('HPAPP:', a.AssetItemCode),
+        GETDATE(),
+        @CreatedBy,
+        NULL
+    FROM AssetItem a
+    WHERE a.AssetClassCode = @AssetClassCode
+      AND a.AssetItemCode IS NOT NULL
+      AND NOT EXISTS (
+          SELECT 1 
+          FROM QRAsset q 
+          WHERE q.AssetClassCode = a.AssetClassCode
+            
+      );
+";
+        foreach (var code in request.Codes)
         {
-            if (request?.Codes == null || request.Codes.Count == 0)
-                return BadRequest(new { success = false, message = "Danh sách mã tài sản rỗng" });
+            if (string.IsNullOrWhiteSpace(code)) continue;
 
-            try
-            {
-                await using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
+            await using var cmd = new SqlCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@AssetClassCode", code.Trim());
+            cmd.Parameters.AddWithValue("@CreatedBy", request.CreatedBy ?? "MobileApp");
 
-                int insertedCount = 0;
-
-                const string sql = @"
-                    IF NOT EXISTS (SELECT 1 FROM QRAsset WHERE AssetClassCode = @AssetClassCode)
-                    BEGIN
-                        INSERT INTO QRAsset (
-                            AssetClassCode, 
-                            QRCode,
-                            CreatedDate, 
-                            CreatedBy,
-                            ImagePath
-                        )
-                        VALUES (
-                            @AssetClassCode,
-                            @QRCode,
-                            GETDATE(),
-                            @CreatedBy,
-                            NULL
-                        );
-                    END";
-
-                foreach (var code in request.Codes)
-                {
-                    if (string.IsNullOrWhiteSpace(code)) continue;
-
-                    await using var cmd = new SqlCommand(sql, connection);
-
-                    cmd.Parameters.AddWithValue("@AssetClassCode", code.Trim());
-                    cmd.Parameters.AddWithValue("@QRCode", $"HPAPP:{code.Trim()}");
-                    cmd.Parameters.AddWithValue("@CreatedBy", request.CreatedBy ?? "MobileApp");
-
-                    insertedCount += await cmd.ExecuteNonQueryAsync();
-                }
-
-                return Ok(new 
-                { 
-                    success = true, 
-                    message = $"Đã tạo/cập nhật {insertedCount} QR code",
-                    count = insertedCount 
-                });
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Lỗi GenerateBatchQR: {ex.Message}\n{ex.StackTrace}");
-                return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
-            }
+            insertedCount += await cmd.ExecuteNonQueryAsync();
         }
+
+        return Ok(new
+        {
+            success = true,
+            message = $"Đã tạo {insertedCount} QR theo số dòng AssetItem",
+            count = insertedCount
+        });
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Lỗi GenerateBatchQR: {ex.Message}\n{ex.StackTrace}");
+        return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
+    }
+}
     }
 
     // Extension methods để đọc an toàn
@@ -357,6 +380,7 @@ public async Task<IActionResult> GetAssetPhysical(
     public class AssetPhysicalItem
     {
         public string AssetClassCode { get; set; } = string.Empty;
+        public string? AssetItemCode { get; set; }
         public decimal Vend { get; set; }
         public decimal Vphis { get; set; }
         public string? LocationCode { get; set; }
