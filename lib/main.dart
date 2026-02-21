@@ -351,7 +351,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 32),
                   const Text(
-                    'Huy Phan',
+                    'Qr Code',
                     style: TextStyle(
                       fontSize: 42,
                       fontWeight: FontWeight.w900,
@@ -553,10 +553,148 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-// ================== TRANG HOME ==================
-class HomeScreen extends StatelessWidget {
+
+// ================== TRANG HOME - HIỂN THỊ TÊN CÔNG TY TỪ API ==================
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  String companyName = 'Đang tải tên công ty...';
+  bool isLoading = true;
+  String? errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchCompanyName();
+  }
+
+  Future<void> _fetchCompanyName() async {
+  if (AppConfig.baseUrl.isEmpty) {
+    setState(() {
+      companyName = 'Chưa kết nối server';
+      isLoading = false;
+      errorMessage = 'Vui lòng đăng nhập lại';
+    });
+    print('→ BaseUrl rỗng, không gọi API');
+    return;
+  }
+
+  setState(() {
+    isLoading = true;
+    errorMessage = null;
+  });
+
+  try {
+    final url = '${AppConfig.baseUrl}/api/login/info';
+    print('┌───────────────────────────────');
+    print('│ Gọi API lấy tên công ty: $url');
+    print('└───────────────────────────────');
+
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {'Content-Type': 'application/json'},
+    ).timeout(const Duration(seconds: 12));
+
+    print('┌───── RESPONSE ───────');
+    print('│ Status: ${response.statusCode}');
+    print('│ Headers: ${response.headers}');
+    print('│ Body (raw):');
+    print(response.body);
+    print('└──────────────────────');
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      print('Parsed JSON: $data');
+
+      if (data['success'] == true) {
+        if (data['data'] != null) {
+          // Cách chính xác theo log của bạn: key là "companyName" (chữ c thường)
+          final companyFromJson = data['data']['companyName']?.toString().trim();
+
+          if (companyFromJson != null && companyFromJson.isNotEmpty) {
+            setState(() {
+              companyName = companyFromJson;
+              isLoading = false;
+            });
+            print('→ Thành công: companyName = "$companyName"');
+            return; // Thoát sớm khi đã set thành công
+          }
+
+          // Fallback 1: nếu backend đổi thành chữ hoa
+          else if (data['data']['CompanyName'] != null) {
+            setState(() {
+              companyName = data['data']['CompanyName'].toString().trim();
+              isLoading = false;
+            });
+            print('→ Tìm thấy với key CompanyName (chữ hoa)');
+            return;
+          }
+
+          // Fallback 2: nếu backend trả thẳng CompanyName không có "data"
+          else if (data['CompanyName'] != null) {
+            setState(() {
+              companyName = data['CompanyName'].toString().trim();
+              isLoading = false;
+            });
+            print('→ Tìm thấy CompanyName trực tiếp (không có data)');
+            return;
+          }
+
+          // Nếu không tìm thấy key nào
+          else {
+            setState(() {
+              companyName = 'Không tìm thấy tên công ty';
+              errorMessage = 'Không có key "companyName" hoặc "CompanyName" trong data';
+              isLoading = false;
+            });
+            print('→ Không tìm thấy key tên công ty nào trong JSON');
+          }
+        } 
+        // Không có object "data"
+        else {
+          setState(() {
+            companyName = 'Cấu trúc JSON không đúng';
+            errorMessage = 'API trả về không có trường "data"';
+            isLoading = false;
+          });
+          print('→ JSON không có object "data"');
+        }
+      } 
+      // success != true
+      else {
+        setState(() {
+          companyName = 'API trả về success = false';
+          errorMessage = data['message'] ?? 'Không có thông báo lỗi từ server';
+          isLoading = false;
+        });
+        print('→ API trả về success = false');
+      }
+    } 
+    // Không phải 200
+    else {
+      setState(() {
+        companyName = 'Lỗi kết nối server';
+        errorMessage = 'Status code: ${response.statusCode}';
+        isLoading = false;
+      });
+      print('→ Lỗi HTTP: ${response.statusCode}');
+    }
+  } catch (e) {
+    setState(() {
+      companyName = 'Lỗi tải dữ liệu';
+      errorMessage = e.toString().length > 120 
+          ? '${e.toString().substring(0, 120)}...' 
+          : e.toString();
+      isLoading = false;
+    });
+    print('→ Exception khi gọi API: $e');
+  }
+}
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -571,31 +709,92 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           children: [
             const SizedBox(height: 60),
+
+            // Avatar công ty hoặc icon
             Container(
               width: 160,
               height: 160,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 8),
-                boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 30, offset: Offset(0, 15))],
+                boxShadow: const [
+                  BoxShadow(color: Colors.black38, blurRadius: 30, offset: Offset(0, 15))
+                ],
               ),
               child: ClipOval(
-                child: Image.asset('assets/images/app_icon.png',
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront_rounded, size: 90, color: Colors.white)),
+                child: Image.asset(
+                  'assets/images/app_icon.png',
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const Icon(
+                    Icons.storefront_rounded,
+                    size: 90,
+                    color: Colors.white,
+                  ),
+                ),
               ),
             ),
+
             const SizedBox(height: 50),
-            const Text('Chào mừng trở lại!', style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.2)),
+
+            // Chào mừng
+            const Text(
+              'Chào mừng trở lại!',
+              style: TextStyle(
+                fontSize: 34,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                letterSpacing: 1.2,
+              ),
+            ),
             const SizedBox(height: 16),
-            const Text('Huy Phan App',
-                style: TextStyle(fontSize: 52, fontWeight: FontWeight.w900, color: Colors.white, shadows: [Shadow(offset: Offset(0, 4), blurRadius: 12, color: Colors.black38)])),
+
+            // Hiển thị tên công ty (có loading & error)
+            if (isLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: CircularProgressIndicator(color: Colors.white),
+              )
+            else if (errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                child: Text(
+                  errorMessage!,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    color: Colors.yellowAccent,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Text(
+                  companyName,
+                  style: const TextStyle(
+                    fontSize: 52,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    shadows: [Shadow(offset: Offset(0, 4), blurRadius: 12, color: Colors.black38)],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+
             const SizedBox(height: 20),
+
             const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 40),
-                child: Text('Hệ thống quản lý hàng hóa bằng QR Code',
-                    textAlign: TextAlign.center, style: TextStyle(fontSize: 19, color: Colors.white, height: 1.6))),
+              padding: EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                'Hệ thống quản lý hàng hóa bằng QR Code',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 19, color: Colors.white, height: 1.6),
+              ),
+            ),
+
             const Spacer(),
+
             Padding(
               padding: const EdgeInsets.only(bottom: 40),
               child: Column(
@@ -651,7 +850,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('HuyPhan App'),
+        title: const Text('QR Code APP'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         actions: [
@@ -3265,7 +3464,23 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
     loadUniqueLocations();
     loadUniqueDepartments();
   }
+void _rebuildVphisControllers() {
+  // Dispose tất cả controller cũ để tránh memory leak
+  for (var ctrl in vphisControllers) {
+    ctrl.dispose();
+  }
+  vphisControllers.clear();
 
+  // Tạo mới dựa trên assets hiện tại
+  vphisControllers = List.generate(assets.length, (i) {
+    final ctrl = TextEditingController();
+    final vphis = assets[i]['Vphis']?.toString() ?? '0';
+    ctrl.text = formatCleanQty(vphis);
+    return ctrl;
+  });
+
+  setState(() {}); // Force rebuild UI
+}
   // Hàm lấy GLPeriod mới nhất và load dữ liệu
   Future<void> _initGLPeriodAndLoad() async {
   String? latestPeriod = await fetchLatestPeriod('asset');
@@ -3400,7 +3615,7 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
   EasyLoading.show(status: 'Đang tải danh sách tài sản...');
 
   try {
-    var url = '$baseUrl/api/asset-phish/get';
+    var url = '$baseUrl/api/asset-physical/get';
     final queryParams = <String, String>{};
 
     // Kỳ kiểm kê (luôn gửi nếu có)
@@ -3448,7 +3663,7 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
             'DepartmentCode': map['DepartmentCode']?.toString().trim() ?? '',
             'DepartmentName': map['DepartmentName']?.toString().trim() ?? 'Chưa có',
             'LocationCode': map['LocationCode']?.toString().trim() ?? '',
-            'SlvgQty': map['SlvgQty']?.toString() ?? '0',
+            'quantity': map['quantity']?.toString() ?? '0',
             'PhisUser': map['PhisUser']?.toString().trim() ?? 'Chưa có',
             'Vphis': map['Vphis']?.toString() ?? '0',
             'CreatedDate': map['CreatedDate'] ?? 'Chưa kiểm kê',
@@ -3476,15 +3691,33 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
   }
 }
   Future<void> _saveVphis(int index) async {
-    final item = assets[index];
-    final vphisStr = vphisControllers[index].text.trim().replaceAll(',', '.');
-    final vphis = double.tryParse(vphisStr) ?? 0.0;
+  final item = assets[index];
+  final vphisText = vphisControllers[index].text.trim();
 
-    if (vphis < 0) {
-      EasyLoading.showError('Số lượng không được âm');
-      return;
-    }
+  if (vphisText.isEmpty) {
+    EasyLoading.showError('Vui lòng nhập số lượng thực tế');
+    return;
+  }
 
+  final vphisStr = vphisText.replaceAll(',', '.').trim(); // trim lại lần nữa
+
+  // Kiểm tra chuỗi có phải số hợp lệ không trước khi parse
+  if (!RegExp(r'^-?\d*\.?\d+$').hasMatch(vphisStr)) {
+    EasyLoading.showError('Số lượng không hợp lệ (chỉ số, dấu chấm hoặc dấu phẩy)');
+    return;
+  }
+
+  final vphis = double.tryParse(vphisStr);
+
+  if (vphis == null) {  // an toàn, dù regex đã lọc
+    EasyLoading.showError('Số lượng không hợp lệ');
+    return;
+  }
+
+  if (vphis < 0) {
+    EasyLoading.showError('Số lượng không được âm');
+    return;
+  }
     if (_currentVPeriod.length != 6 || int.tryParse(_currentVPeriod) == null) {
       EasyLoading.showError('VPeriod phải là 6 chữ số (YYYYMM)');
       return;
@@ -3492,7 +3725,8 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
 
     final saveData = {
       'AssetClassCode': item['AssetClassCode'],
-      'Vend': double.tryParse(item['SlvgQty'].toString().replaceAll(',', '.')) ?? 0.0,
+      'AssetItemCode': item['AssetItemCode'] ?? '',
+      'Vend': double.tryParse(item['quantity'].toString().replaceAll(',', '.')) ?? 0.0,
       'Vphis': vphis,
       'LocationCode': item['LocationCode'],
       'DepartmentCode': item['DepartmentCode'],
@@ -3503,7 +3737,7 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
     EasyLoading.show(status: 'Đang lưu...');
     try {
       final res = await http.post(
-        Uri.parse('$baseUrl/api/asset-phish/save'),
+        Uri.parse('$baseUrl/api/asset-physical/save'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'Items': [saveData]}),
       );
@@ -3517,6 +3751,14 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
           assets[index]['Vphis'] = vphis.toString();
           assets[index]['CreatedDate'] = DateTime.now().toString();
         });
+        await _loadAssets();  // ← THÊM DÒNG NÀY
+        _rebuildVphisControllers();
+        // Đồng bộ lại tất cả controller với dữ liệu mới từ assets
+for (int i = 0; i < assets.length; i++) {
+  final newVphis = assets[i]['Vphis']?.toString() ?? '0';
+  vphisControllers[i].text = formatCleanQty(newVphis);
+}
+setState(() {});
       } else {
         EasyLoading.showError(result['message'] ?? 'Lưu thất bại');
       }
@@ -3575,7 +3817,7 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
   Future<void> _showVphisInputDialog(Map<String, dynamic> item, int? existingIndex) async {
     final code = item['assetClassCode'] ?? '';
     final name = item['assetClassName'] ?? 'Không tên';
-    final slvgQty = item['slvgQty'] ?? '0';
+    final quantity = item['quantity'] ?? '0';
     final phisUser = item['phisUser'] ?? '';
     final location = item['locationCode'] ?? '';
     final dept = item['departmentCode'] ?? '';
@@ -3595,7 +3837,7 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
               Text('Tên: $name', style: const TextStyle(fontWeight: FontWeight.bold)),
               Text('Vị trí: $location | Phòng ban: $dept'),
               Text('Người dùng: $phisUser'),
-              Text('Hệ thống: ${formatCleanQty(slvgQty)}', style: const TextStyle(color: Color.fromARGB(255, 97, 66, 222))),
+              Text('Hệ thống: ${formatCleanQty(quantity)}', style: const TextStyle(color: Color.fromARGB(255, 97, 66, 222))),
               const SizedBox(height: 8),
               Text(
                 'Ngày kiểm kê trước: $createdDate',
@@ -3619,28 +3861,50 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
           ElevatedButton(
-            onPressed: () {
-              if (ctrl.text.trim().isEmpty) {
-                EasyLoading.showError('Vui lòng nhập số lượng');
-                return;
-              }
-              Navigator.pop(ctx, true);
-            },
-            child: const Text('Lưu'),
-          ),
+  onPressed: () {
+    final text = ctrl.text.trim();
+    if (text.isEmpty) {
+      EasyLoading.showError('Vui lòng nhập số lượng');
+      return;
+    }
+
+    final parsedStr = text.replaceAll(',', '.').trim();
+    if (!RegExp(r'^-?\d*\.?\d+$').hasMatch(parsedStr)) {
+      EasyLoading.showError('Số lượng không hợp lệ');
+      return;
+    }
+
+    final parsed = double.tryParse(parsedStr);
+    if (parsed == null) {
+      EasyLoading.showError('Số lượng không hợp lệ');
+      return;
+    }
+
+    Navigator.pop(ctx, true);
+  },
+  child: const Text('Lưu'),
+),
         ],
       ),
     );
 
     if (confirmed != true) return;
 
-    final vphisStr = ctrl.text.trim().replaceAll(',', '.');
-    final vphis = double.tryParse(vphisStr) ?? 0.0;
+final vphisStr = ctrl.text.trim().replaceAll(',', '.').trim();
+if (!RegExp(r'^-?\d*\.?\d+$').hasMatch(vphisStr)) {
+  EasyLoading.showError('Số lượng không hợp lệ sau khi nhập');
+  return;
+}
+final vphis = double.tryParse(vphisStr);
+if (vphis == null) {
+  EasyLoading.showError('Lỗi parse số lượng');
+  return;
+}
 
     final saveData = {
       'AssetClassCode': code,
       'AssetItemCode': item['AssetItemCode'] ?? '',
-      'Vend': double.tryParse(slvgQty.toString().replaceAll(',', '.')) ?? 0.0,
+      'Vend': double.tryParse(quantity.toString().replaceAll(',', '.')) ?? 0.0,
       'Vphis': vphis,
       'LocationCode': location,
       'DepartmentCode': dept,
@@ -3651,7 +3915,7 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
     EasyLoading.show(status: 'Đang lưu...');
     try {
       final res = await http.post(
-        Uri.parse('$baseUrl/api/asset-phish/save'),
+        Uri.parse('$baseUrl/api/asset-physical/save'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'Items': [saveData]}),
       );
@@ -3669,6 +3933,13 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
         }
 
         await _loadAssets();
+        // Tái tạo toàn bộ controller
+  _rebuildVphisControllers();
+        for (int i = 0; i < assets.length; i++) {
+    final newVphis = assets[i]['Vphis']?.toString() ?? '0';
+    vphisControllers[i].text = formatCleanQty(newVphis);
+  }
+  setState(() {});  // ← Force rebuild
       } else {
         EasyLoading.showError(result['message'] ?? 'Lưu thất bại');
       }
@@ -4010,7 +4281,7 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
                         final deptCode = item['DepartmentCode'] ?? '';
                         final deptName = item['DepartmentName'] ?? 'Chưa có';
                         final loc = item['LocationCode'] ?? '';
-                        final slvgQty = item['SlvgQty'] ?? '0';
+                        final quantity = item['quantity'] ?? '0'; 
                         final phisUser = item['PhisUser'] ?? 'Chưa có';
                         final vphisCtrl = vphisControllers[index];
                         final parsedVphis = double.tryParse(vphisCtrl.text.replaceAll(',', '.')) ?? 0.0;
@@ -4059,7 +4330,7 @@ class _AssetPhysicalTabState extends State<AssetPhysicalTab> {
                                 Text('Phòng ban: $deptName ($deptCode)'),
                                 Text('Người dùng: $phisUser', style: const TextStyle(color: Colors.blueGrey)),
                                 Text(
-                                  'Hệ thống: ${formatCleanQty(slvgQty)}',
+                                  'Hệ thống: ${formatCleanQty(quantity)}',
                                   style: const TextStyle(color: Colors.blueGrey),
                                 ),
                                 Text(

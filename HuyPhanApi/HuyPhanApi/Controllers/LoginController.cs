@@ -51,6 +51,36 @@ public async Task<IActionResult> Login([FromBody] LoginRequest request)
         return StatusCode(500, new { success = false, message = "Lỗi kết nối database: " + ex.Message });
     }
 }
+// Endpoint mới: Lấy thông tin công ty (dùng ADO.NET)
+    [HttpGet("info")]
+    public async Task<IActionResult> GetCompanyInfo()
+    {
+        try
+        {
+            using var connection = new SqlConnection(_connectionString);
+            await connection.OpenAsync();
+
+            var query = "SELECT TOP 1 CompanyName FROM CompanyInfo"; // Lấy công ty đầu tiên (hoặc thêm WHERE nếu cần)
+            using var command = new SqlCommand(query, connection);
+
+            var CompanyName = await command.ExecuteScalarAsync();
+
+            if (CompanyName == null || CompanyName == DBNull.Value)
+            {
+                return NotFound(new { success = false, message = "Không tìm thấy thông tin công ty" });
+            }
+
+            return Ok(new 
+            { 
+                success = true, 
+                data = new { CompanyName = CompanyName.ToString().Trim() } 
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Lỗi lấy thông tin công ty: " + ex.Message });
+        }
+    }
 // Phương thức mới: Tạo bảng nếu chưa tồn tại
 private async Task CreateTablesIfNotExists(SqlConnection connection)
 {

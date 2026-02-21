@@ -58,46 +58,45 @@ else
 }
 
                 var sql = @"
-                    SET NOCOUNT ON;
+    SET NOCOUNT ON;
 
-                    WITH LatestPhis AS (
-                        SELECT 
-                            AssetClassCode,
-                            AssetItemCode,
-                            Vphis,
-                            Vend,
-                            Vperiod,
-                            LocationCode,
-                            DepartmentCode,
-                            CreatedDate,
-                            CreatedBy,
-                            ROW_NUMBER() OVER (PARTITION BY AssetClassCode, AssetItemCode ORDER BY CreatedDate DESC) AS rn
-                        FROM QRAssetPhisical
-                        WHERE IsActive = 1 AND Vperiod = @Vperiod
-                    )
-                    SELECT 
-                        a.AssetClassCode,
-                        a.AssetItemCode,
-                        LTRIM(RTRIM(a.AssetClassName)) AS AssetClassName,
-                        LTRIM(RTRIM(a.DepartmentCode)) AS DepartmentCode,
-                        LTRIM(RTRIM(a.LocationCode)) AS LocationCode,
-                        ISNULL(a.SlvgQty, 0) AS SlvgQty,
-                        LTRIM(RTRIM(a.PhisLoc)) AS PhisLoc,
-                        LTRIM(RTRIM(a.PhisUser)) AS PhisUser,
-                        ISNULL(l.Vphis, 0) AS Vphis,
-                        ISNULL(l.Vend, ISNULL(a.SlvgQty, 0)) AS Vend,
-                        @Vperiod AS Vperiod,
-                        l.CreatedDate,
-                        l.CreatedBy,
-                        LTRIM(RTRIM(d.DepartmentName)) AS DepartmentName
-                    FROM AssetItem a
-                    LEFT JOIN LatestPhis l 
-                        ON a.AssetClassCode = l.AssetClassCode 
-                        AND a.AssetItemCode = l.AssetItemCode
-                        AND l.rn = 1
-                    LEFT JOIN Department d ON a.DepartmentCode = d.DepartmentCode
-                    WHERE 1 = 1";
-
+    WITH LatestPhis AS (
+        SELECT 
+            AssetClassCode,
+            AssetItemCode,
+            Vphis,
+            Vend,
+            Vperiod,
+            LocationCode,
+            DepartmentCode,
+            CreatedDate,
+            CreatedBy,
+            ROW_NUMBER() OVER (PARTITION BY AssetClassCode, AssetItemCode ORDER BY CreatedDate DESC) AS rn
+        FROM QRAssetPhisical
+        WHERE IsActive = 1 AND Vperiod = @Vperiod
+    )
+    SELECT 
+        a.AssetClassCode,
+        a.AssetItemCode,
+        dbo.fTCVNToUnicode(LTRIM(RTRIM(a.AssetClassName))) AS AssetClassName,
+        LTRIM(RTRIM(a.DepartmentCode)) AS DepartmentCode,
+        LTRIM(RTRIM(a.LocationCode)) AS LocationCode,
+        ISNULL(a.Quantity, 0) AS Quantity,
+        LTRIM(RTRIM(a.PhisLoc)) AS PhisLoc,
+        LTRIM(RTRIM(a.PhisUser)) AS PhisUser,
+        ISNULL(l.Vphis, 0) AS Vphis,
+        ISNULL(l.Vend, ISNULL(a.Quantity, 0)) AS Vend,
+        @Vperiod AS Vperiod,
+        l.CreatedDate,
+        l.CreatedBy,
+        dbo.fTCVNToUnicode(LTRIM(RTRIM(d.DepartmentName))) AS DepartmentName
+    FROM AssetItem a
+    LEFT JOIN LatestPhis l 
+        ON a.AssetClassCode = l.AssetClassCode 
+    AND a.AssetItemCode = l.AssetItemCode
+        AND l.rn = 1
+    LEFT JOIN Department d ON a.DepartmentCode = d.DepartmentCode
+    WHERE 1 = 1";
                 if (!string.IsNullOrWhiteSpace(locationCode))
                     sql += " AND a.LocationCode = @LocationCode";
 
@@ -134,7 +133,7 @@ else
                         ["AssetClassName"] = reader.GetSafeString("AssetClassName") ?? "Không tên",
                         ["DepartmentCode"] = reader.GetSafeString("DepartmentCode") ?? "",
                         ["LocationCode"] = reader.GetSafeString("LocationCode") ?? "",
-                        ["SlvgQty"] = reader.GetSafeDecimal("SlvgQty"),
+                        ["quantity"] = reader.GetSafeDecimal("quantity"),
                         ["PhisLoc"] = reader.GetSafeString("PhisLoc") ?? "",
                         ["PhisUser"] = reader.GetSafeString("PhisUser") ?? "Chưa có",
                         ["Vphis"] = reader.GetSafeDecimal("Vphis"),
@@ -143,7 +142,8 @@ else
                         ["CreatedDate"] = reader["CreatedDate"] is DateTime dt 
                             ? dt.ToString("dd/MM/yyyy HH:mm:ss") 
                             : "Chưa kiểm kê",
-                        ["CreatedBy"] = reader.GetSafeString("CreatedBy") ?? ""
+                        ["CreatedBy"] = reader.GetSafeString("CreatedBy") ?? "",
+                        ["DepartmentName"] = reader.GetSafeString("DepartmentName") ?? "Không tên"
                     });
                 }
 
