@@ -271,18 +271,18 @@ public async Task<IActionResult> GetAssetPhysical(
                 await connection.OpenAsync();
 
                 const string sql = @"
-                    SELECT 
-                        a.AssetClassCode,
-                        dbo.fTCVNToUnicode(LTRIM(RTRIM(a.AssetClassName))() AS AssetClassName,
-                        dbo.fTCVNToUnicode(LTRIM(RTRIM(a.DepartmentCode))) AS DepartmentCode,
-                        LTRIM(RTRIM(a.LocationCode)) AS LocationCode,
-                        ISNULL(a.SlvgQty, 0) AS SlvgQty,
-                        LTRIM(RTRIM(a.PhisLoc)) AS PhisLoc,
-                        LTRIM(RTRIM(a.PhisUser)) AS PhisUser,
-                        q.ImagePath
-                    FROM AssetItem a
-                    LEFT JOIN QRAsset q ON a.AssetClassCode = q.AssetClassCode and a.AssetItemCode=q.AssetItemCode
-                    WHERE a.AssetClassCode = @AssetClassCode";
+    SELECT 
+        a.AssetClassCode,
+        dbo.fTCVNToUnicode(LTRIM(RTRIM(a.AssetClassName))) AS AssetClassName,   -- ← XÓA () dư
+        dbo.fTCVNToUnicode(LTRIM(RTRIM(a.DepartmentCode))) AS DepartmentCode,
+        LTRIM(RTRIM(a.LocationCode)) AS LocationCode,
+        ISNULL(a.SlvgQty, 0) AS SlvgQty,
+        LTRIM(RTRIM(a.PhisLoc)) AS PhisLoc,
+        LTRIM(RTRIM(a.PhisUser)) AS PhisUser,
+        q.ImagePath
+    FROM AssetItem a
+    LEFT JOIN QRAsset q ON a.AssetClassCode = q.AssetClassCode and a.AssetItemCode = q.AssetItemCode
+    WHERE a.AssetClassCode = @AssetClassCode";
 
                 await using var cmd = new SqlCommand(sql, connection);
                 cmd.Parameters.AddWithValue("@AssetClassCode", request.AssetCode.Trim());

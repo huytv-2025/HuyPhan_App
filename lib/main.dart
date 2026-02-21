@@ -3780,7 +3780,7 @@ setState(() {});
 
     try {
       final res = await http.post(
-        Uri.parse('$baseUrl/api/asset-phish/search'),
+        Uri.parse('$baseUrl/api/asset-physical/search'),   // ← ĐÚNG
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'AssetCode': code}),
       );
