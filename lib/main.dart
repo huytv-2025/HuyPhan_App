@@ -3770,88 +3770,103 @@ setState(() {});
   }
 
   Future<void> _processScan(String qrData) async {
-    if (!qrData.startsWith('HPAPP:')) {
-      setState(() => _scanMessage = 'QR không hợp lệ (thiếu HPAPP:)');
-      EasyLoading.showError('QR không hợp lệ');
+  print('=== BẮT ĐẦU QUÉT QR ===');
+  print('QR raw: $qrData');
+
+  if (!qrData.startsWith('HPAPP:')) {
+    print('QR không hợp lệ: thiếu HPAPP:');
+    setState(() => _scanMessage = 'QR không hợp lệ (thiếu HPAPP:)');
+    EasyLoading.showError('QR không hợp lệ');
+    return;
+  }
+
+  final code = qrData.substring(6).trim();
+  print('Mã TSCĐ quét: $code');
+
+  setState(() => _scanMessage = 'Đang tìm tài sản $code...');
+  EasyLoading.show(status: 'Đang tìm tài sản...');
+
+  try {
+    final fullUrl = '$baseUrl/api/asset-physical/search';
+    print('Base URL: $baseUrl');
+    print('Gọi API: $fullUrl');
+    print('Body gửi: ${jsonEncode({'AssetCode': code})}');
+
+    final res = await http.post(
+      Uri.parse(fullUrl),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'AssetCode': code}),
+    ).timeout(const Duration(seconds: 15));
+
+    print('API trả về status: ${res.statusCode}');
+    print('API body: ${res.body}');
+
+    EasyLoading.dismiss();
+
+    if (res.statusCode != 200) {
+      print('Lỗi status: ${res.statusCode} - ${res.body}');
+      setState(() => _scanMessage = 'Lỗi server: ${res.statusCode}');
+      EasyLoading.showError('Lỗi server: ${res.statusCode}');
       return;
     }
 
-    final code = qrData.substring(6).trim();
-    setState(() => _scanMessage = 'Đang tìm tài sản $code...');
-    EasyLoading.show(status: 'Đang tìm tài sản...');
+    final data = jsonDecode(res.body);
+    print('Data parse thành công: $data');
 
-    try {
-      // Sử dụng đúng URL (thay localhost bằng 10.0.2.2 nếu dùng emulator Android)
-      final apiUrl = baseUrl.replaceAll('localhost', '10.0.2.2'); // ← Quan trọng khi test emulator
-      final res = await http.post(
-        Uri.parse('$apiUrl/api/asset-physical/search'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'AssetCode': code}),
-      ).timeout(const Duration(seconds: 12));
-
-      EasyLoading.dismiss();
-
-      if (res.statusCode != 200) {
-        setState(() => _scanMessage = 'Lỗi server: ${res.statusCode}');
-        EasyLoading.showError('Lỗi server: ${res.statusCode}');
-        print('API search error: ${res.body}');
-        return;
-      }
-
-      final data = jsonDecode(res.body);
-      if (!data['success'] || data['data'] == null || (data['data'] is List && data['data'].isEmpty)) {
-        setState(() => _scanMessage = 'Không tìm thấy tài sản với mã $code');
-        EasyLoading.showError('Không tìm thấy tài sản');
-        return;
-      }
-
-      // API trả về object hoặc list → lấy item đầu tiên
-      final item = (data['data'] is List) ? data['data'][0] : data['data'];
-
-      // Tìm index trong danh sách hiện tại
-      int? existingIndex = assets.indexWhere((e) => e['AssetClassCode'] == code);
-
-      // Nếu chưa có → thêm mới vào danh sách
-      if (existingIndex == -1) {
-        setState(() {
-          assets.add({
-            'AssetClassCode': code,
-            'AssetItemCode': item['AssetItemCode'] ?? '',
-            'AssetClassName': item['AssetClassName'] ?? 'Không tên',
-            'DepartmentCode': item['DepartmentCode'] ?? '',
-            'DepartmentName': item['DepartmentName'] ?? 'Chưa có',
-            'LocationCode': item['LocationCode'] ?? '',
-            'quantity': item['quantity'] ?? '0',
-            'PhisUser': item['PhisUser'] ?? 'Chưa có',
-            'Vphis': '0',
-            'CreatedDate': 'Chưa kiểm kê',
-          });
-          final newCtrl = TextEditingController(text: '0');
-          vphisControllers.add(newCtrl);
-          existingIndex = assets.length - 1;
-        });
-        print('Đã thêm mới tài sản $code vào danh sách');
-      }
-
-      // Show dialog nhập Vphis
-      await _showVphisInputDialog(item, existingIndex!);
-
-      setState(() => _scanMessage = 'Đã xử lý mã $code thành công');
-      EasyLoading.showSuccess('Đã xử lý');
-
-    } catch (e, stack) {
-      EasyLoading.dismiss();
-      print('Lỗi quét & xử lý QR: $e\n$stack');
-      setState(() => _scanMessage = 'Lỗi kết nối hoặc xử lý QR: $e');
-      EasyLoading.showError('Lỗi: $e');
+    if (!data['success'] || data['data'] == null || (data['data'] is List && data['data'].isEmpty)) {
+      print('API không success hoặc data rỗng');
+      setState(() => _scanMessage = 'Không tìm thấy tài sản với mã $code');
+      EasyLoading.showError('Không tìm thấy tài sản');
+      return;
     }
 
-    // Xóa message sau 4 giây
-    Future.delayed(const Duration(seconds: 4), () {
-      if (mounted) setState(() => _scanMessage = null);
-    });
+    // Xử lý item
+    final item = (data['data'] is List) ? data['data'][0] : data['data'];
+    print('Item từ API: $item');
+
+    int? existingIndex = assets.indexWhere((e) => e['AssetClassCode'] == code);
+
+    if (existingIndex == -1) {
+      print('Mã $code chưa có trong danh sách → thêm mới');
+      setState(() {
+        assets.add({
+          'AssetClassCode': code,
+          'AssetItemCode': item['AssetItemCode'] ?? '',
+          'AssetClassName': item['AssetClassName'] ?? 'Không tên',
+          'DepartmentCode': item['DepartmentCode'] ?? '',
+          'DepartmentName': item['DepartmentName'] ?? 'Chưa có',
+          'LocationCode': item['LocationCode'] ?? '',
+          'quantity': item['quantity'] ?? '0',
+          'PhisUser': item['PhisUser'] ?? 'Chưa có',
+          'Vphis': '0',
+          'CreatedDate': 'Chưa kiểm kê',
+        });
+        final newCtrl = TextEditingController(text: '0');
+        vphisControllers.add(newCtrl);
+        existingIndex = assets.length - 1;
+      });
+    }
+
+    // Show dialog
+    print('Gọi show dialog cho index $existingIndex');
+    await _showVphisInputDialog(item, existingIndex!);
+
+    setState(() => _scanMessage = 'Đã xử lý mã $code thành công');
+    EasyLoading.showSuccess('Đã xử lý');
+
+  } catch (e, stack) {
+    EasyLoading.dismiss();
+    print('=== LỖI QUÉT QR ===');
+    print('Exception: $e');
+    print('Stack trace: $stack');
+    setState(() => _scanMessage = 'Lỗi kết nối hoặc xử lý QR: $e');
+    EasyLoading.showError('Lỗi: $e');
   }
 
+  Future.delayed(const Duration(seconds: 4), () {
+    if (mounted) setState(() => _scanMessage = null);
+  });
+}
   // Dialog nhập Vphis (đã cải thiện để chắc chắn hiện)
   Future<void> _showVphisInputDialog(Map<String, dynamic> item, int existingIndex) async {
     if (!mounted) return; // An toàn: không show nếu widget đã dispose
