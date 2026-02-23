@@ -3770,193 +3770,225 @@ setState(() {});
   }
 
   Future<void> _processScan(String qrData) async {
-  if (!qrData.startsWith('HPAPP:')) {
-    setState(() => _scanMessage = 'QR không hợp lệ (thiếu HPAPP:)');
-    return;
-  }
-
-  final code = qrData.substring(6).trim();
-  setState(() => _scanMessage = 'Đang tìm tài sản $code...');
-
-  try {
-    final res = await http.post(
-      Uri.parse('$baseUrl/api/asset-physical/search'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'AssetCode': code}),
-    ).timeout(const Duration(seconds: 15));
-
-    if (res.statusCode != 200) {
-      setState(() => _scanMessage = 'Lỗi server: ${res.statusCode}');
+    if (!qrData.startsWith('HPAPP:')) {
+      setState(() => _scanMessage = 'QR không hợp lệ (thiếu HPAPP:)');
+      EasyLoading.showError('QR không hợp lệ');
       return;
     }
 
-    final data = jsonDecode(res.body);
-    if (!data['success'] || data['data'] == null || data['data'].isEmpty) {
-      setState(() => _scanMessage = 'Không tìm thấy tài sản với mã $code');
-      return;
-    }
+    final code = qrData.substring(6).trim();
+    setState(() => _scanMessage = 'Đang tìm tài sản $code...');
+    EasyLoading.show(status: 'Đang tìm tài sản...');
 
-    final item = data['data']; // giả sử API trả về object hoặc list[0]
-    int? existingIndex = assets.indexWhere((e) => e['AssetClassCode'] == code);
+    try {
+      // Sử dụng đúng URL (thay localhost bằng 10.0.2.2 nếu dùng emulator Android)
+      final apiUrl = baseUrl.replaceAll('localhost', '10.0.2.2'); // ← Quan trọng khi test emulator
+      final res = await http.post(
+        Uri.parse('$apiUrl/api/asset-physical/search'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'AssetCode': code}),
+      ).timeout(const Duration(seconds: 12));
 
-    // Nếu chưa có trong danh sách → thêm mới vào assets trước khi show dialog
-    if (existingIndex == -1) {
-      setState(() {
-        assets.add({
-          'AssetClassCode': code,
-          'AssetItemCode': item['AssetItemCode'] ?? '',
-          'AssetClassName': item['AssetClassName'] ?? 'Không tên',
-          'DepartmentCode': item['DepartmentCode'] ?? '',
-          'DepartmentName': item['DepartmentName'] ?? 'Chưa có',
-          'LocationCode': item['LocationCode'] ?? '',
-          'quantity': item['quantity'] ?? '0',
-          'PhisUser': item['PhisUser'] ?? 'Chưa có',
-          'Vphis': '0',
-          'CreatedDate': 'Chưa kiểm kê',
+      EasyLoading.dismiss();
+
+      if (res.statusCode != 200) {
+        setState(() => _scanMessage = 'Lỗi server: ${res.statusCode}');
+        EasyLoading.showError('Lỗi server: ${res.statusCode}');
+        print('API search error: ${res.body}');
+        return;
+      }
+
+      final data = jsonDecode(res.body);
+      if (!data['success'] || data['data'] == null || (data['data'] is List && data['data'].isEmpty)) {
+        setState(() => _scanMessage = 'Không tìm thấy tài sản với mã $code');
+        EasyLoading.showError('Không tìm thấy tài sản');
+        return;
+      }
+
+      // API trả về object hoặc list → lấy item đầu tiên
+      final item = (data['data'] is List) ? data['data'][0] : data['data'];
+
+      // Tìm index trong danh sách hiện tại
+      int? existingIndex = assets.indexWhere((e) => e['AssetClassCode'] == code);
+
+      // Nếu chưa có → thêm mới vào danh sách
+      if (existingIndex == -1) {
+        setState(() {
+          assets.add({
+            'AssetClassCode': code,
+            'AssetItemCode': item['AssetItemCode'] ?? '',
+            'AssetClassName': item['AssetClassName'] ?? 'Không tên',
+            'DepartmentCode': item['DepartmentCode'] ?? '',
+            'DepartmentName': item['DepartmentName'] ?? 'Chưa có',
+            'LocationCode': item['LocationCode'] ?? '',
+            'quantity': item['quantity'] ?? '0',
+            'PhisUser': item['PhisUser'] ?? 'Chưa có',
+            'Vphis': '0',
+            'CreatedDate': 'Chưa kiểm kê',
+          });
+          final newCtrl = TextEditingController(text: '0');
+          vphisControllers.add(newCtrl);
+          existingIndex = assets.length - 1;
         });
-        // Tạo controller mới cho item mới thêm
-        final newCtrl = TextEditingController(text: '0');
-        vphisControllers.add(newCtrl);
-        existingIndex = assets.length - 1;
-      });
+        print('Đã thêm mới tài sản $code vào danh sách');
+      }
+
+      // Show dialog nhập Vphis
+      await _showVphisInputDialog(item, existingIndex!);
+
+      setState(() => _scanMessage = 'Đã xử lý mã $code thành công');
+      EasyLoading.showSuccess('Đã xử lý');
+
+    } catch (e, stack) {
+      EasyLoading.dismiss();
+      print('Lỗi quét & xử lý QR: $e\n$stack');
+      setState(() => _scanMessage = 'Lỗi kết nối hoặc xử lý QR: $e');
+      EasyLoading.showError('Lỗi: $e');
     }
 
-    // Bây giờ show dialog
-    await _showVphisInputDialog(item, existingIndex!);
-    setState(() => _scanMessage = 'Đã xử lý mã $code');
-
-  } catch (e, stack) {
-    print('Lỗi quét & xử lý: $e\n$stack');
-    setState(() => _scanMessage = 'Lỗi kết nối hoặc xử lý QR');
+    // Xóa message sau 4 giây
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _scanMessage = null);
+    });
   }
 
-  Future.delayed(const Duration(seconds: 4), () {
-    if (mounted) setState(() => _scanMessage = null);
-  });
-}
+  // Dialog nhập Vphis (đã cải thiện để chắc chắn hiện)
+  Future<void> _showVphisInputDialog(Map<String, dynamic> item, int existingIndex) async {
+    if (!mounted) return; // An toàn: không show nếu widget đã dispose
 
-// Dialog nhập Vphis - đã cải thiện để hiển thị rõ ràng hơn
-Future<void> _showVphisInputDialog(Map<String, dynamic> item, int existingIndex) async {
-  final code = item['AssetClassCode'] ?? item['assetClassCode'] ?? '';
-  final name = item['AssetClassName'] ?? 'Không tên';
-  final quantity = item['quantity'] ?? '0';
-  final phisUser = item['PhisUser'] ?? 'Chưa có';
-  final location = item['LocationCode'] ?? '';
-  final dept = item['DepartmentCode'] ?? '';
-  final createdDate = item['CreatedDate'] ?? 'Chưa kiểm kê';
+    final code = item['AssetClassCode'] ?? item['assetClassCode'] ?? '';
+    final name = item['AssetClassName'] ?? 'Không tên';
+    final quantity = item['quantity'] ?? '0';
+    final phisUser = item['PhisUser'] ?? 'Chưa có';
+    final location = item['LocationCode'] ?? '';
+    final dept = item['DepartmentCode'] ?? '';
+    final createdDate = item['CreatedDate'] ?? 'Chưa kiểm kê';
 
-  final ctrl = TextEditingController(
-    text: vphisControllers[existingIndex].text.isNotEmpty 
-        ? vphisControllers[existingIndex].text 
-        : '0',
-  );
-
-  final confirmed = await showDialog<bool>(
-    context: context,
-    barrierDismissible: false,
-    builder: (ctx) => AlertDialog(
-      title: Text('Kiểm kê tài sản: $code', style: const TextStyle(fontWeight: FontWeight.bold)),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Tên: $name', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Text('Vị trí: $location | Phòng ban: $dept'),
-            Text('Người dùng: $phisUser'),
-            Text('Hệ thống: ${formatCleanQty(quantity)}', style: const TextStyle(color: Colors.indigo, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            Text('Ngày kiểm kê trước: $createdDate', style: const TextStyle(fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 20),
-            TextField(
-              controller: ctrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              autofocus: true,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d*[,.]?\d{0,2}')),
-              ],
-              decoration: InputDecoration(
-                labelText: 'Số lượng thực tế (Vphis)',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                filled: true,
-                fillColor: Colors.grey[100],
-                prefixIcon: const Icon(Icons.inventory, color: Colors.green),
-                hintText: 'Nhập số lượng thực tế...',
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, false),
-          child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            final text = ctrl.text.trim().replaceAll(',', '.');
-            if (text.isEmpty || double.tryParse(text) == null || double.parse(text) < 0) {
-              EasyLoading.showError('Vui lòng nhập số lượng hợp lệ (≥ 0)');
-              return;
-            }
-            Navigator.pop(ctx, true);
-          },
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700),
-          child: const Text('LƯU'),
-        ),
-      ],
-    ),
-  );
-
-  if (confirmed != true) return;
-
-  final vphisStr = ctrl.text.trim().replaceAll(',', '.');
-  final vphis = double.parse(vphisStr);
-
-  // Lưu vào server
-  final saveData = {
-    'AssetClassCode': code,
-    'AssetItemCode': item['AssetItemCode'] ?? '',
-    'Vend': double.tryParse(quantity.toString().replaceAll(',', '.')) ?? 0.0,
-    'Vphis': vphis,
-    'LocationCode': location,
-    'DepartmentCode': dept,
-    'Vperiod': _currentVPeriod,
-    'CreatedBy': 'MobileApp',
-  };
-
-  EasyLoading.show(status: 'Đang lưu...');
-  try {
-    final res = await http.post(
-      Uri.parse('$baseUrl/api/asset-physical/save'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'Items': [saveData]}),
+    final ctrl = TextEditingController(
+      text: vphisControllers[existingIndex].text.isNotEmpty 
+          ? vphisControllers[existingIndex].text 
+          : '0',
     );
 
-    final result = jsonDecode(res.body);
-    if (res.statusCode == 200 && result['success'] == true) {
-      EasyLoading.showSuccess('Đã lưu thành công');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text('Kiểm kê tài sản: $code', style: const TextStyle(fontWeight: FontWeight.bold)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Tên: $name', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Text('Vị trí: $location | Phòng ban: $dept'),
+              Text('Người dùng: $phisUser'),
+              Text('Hệ thống: ${formatCleanQty(quantity)}', style: const TextStyle(color: Colors.indigo, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              Text('Ngày kiểm kê trước: $createdDate', style: const TextStyle(fontSize: 13, color: Colors.grey)),
+              const SizedBox(height: 20),
+              TextField(
+                controller: ctrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                autofocus: true,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d*[,.]?\d{0,2}')),
+                ],
+                decoration: InputDecoration(
+                  labelText: 'Số lượng thực tế (Vphis)',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: Colors.grey[100],
+                  prefixIcon: const Icon(Icons.inventory, color: Colors.green),
+                  hintText: 'Nhập số lượng thực tế...',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final text = ctrl.text.trim().replaceAll(',', '.');
+              if (text.isEmpty || double.tryParse(text) == null || double.parse(text) < 0) {
+                EasyLoading.showError('Vui lòng nhập số lượng hợp lệ (≥ 0)');
+                return;
+              }
+              Navigator.pop(ctx, true);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700),
+            child: const Text('LƯU'),
+          ),
+        ],
+      ),
+    );
 
-      // Cập nhật local ngay lập tức
-      setState(() {
-        assets[existingIndex]['Vphis'] = vphis.toString();
-        assets[existingIndex]['CreatedDate'] = DateTime.now().toIso8601String();
-        vphisControllers[existingIndex].text = formatCleanQty(vphis.toStringAsFixed(2));
-      });
+    if (confirmed != true || !mounted) return;
 
-      // Reload toàn bộ để đồng bộ server (nếu cần)
-      await _loadAssets();
-      _rebuildVphisControllers();
-    } else {
-      EasyLoading.showError(result['message'] ?? 'Lưu thất bại');
+    final vphisStr = ctrl.text.trim().replaceAll(',', '.');
+    final vphis = double.tryParse(vphisStr);
+
+    if (vphis == null) {
+      EasyLoading.showError('Số lượng không hợp lệ');
+      return;
     }
-  } catch (e) {
-    EasyLoading.showError('Lỗi lưu: $e');
-  } finally {
-    EasyLoading.dismiss();
+
+    // Lưu vào server
+    final saveData = {
+      'AssetClassCode': code,
+      'AssetItemCode': item['AssetItemCode'] ?? '',
+      'Vend': double.tryParse(quantity.toString().replaceAll(',', '.')) ?? 0.0,
+      'Vphis': vphis,
+      'LocationCode': location,
+      'DepartmentCode': dept,
+      'Vperiod': _currentVPeriod,
+      'CreatedBy': 'MobileApp',
+    };
+
+    EasyLoading.show(status: 'Đang lưu...');
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/api/asset-physical/save'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'Items': [saveData]}),
+      );
+
+      final result = jsonDecode(res.body);
+      if (res.statusCode == 200 && result['success'] == true) {
+        EasyLoading.showSuccess('Đã lưu thành công');
+
+        // Cập nhật local ngay
+        setState(() {
+          assets[existingIndex]['Vphis'] = vphis.toString();
+          assets[existingIndex]['CreatedDate'] = DateTime.now().toIso8601String();
+          vphisControllers[existingIndex].text = formatCleanQty(vphis.toStringAsFixed(2));
+        });
+
+        // Reload danh sách từ server để đồng bộ
+        await _loadAssets();
+        _rebuildVphisControllers();
+
+        // Đồng bộ lại tất cả controller
+        for (int i = 0; i < assets.length; i++) {
+          final newVphis = assets[i]['Vphis']?.toString() ?? '0';
+          vphisControllers[i].text = formatCleanQty(newVphis);
+        }
+        setState(() {});
+      } else {
+        EasyLoading.showError(result['message'] ?? 'Lưu thất bại');
+      }
+    } catch (e) {
+      EasyLoading.showError('Lỗi lưu: $e');
+      print('Lỗi lưu Vphis: $e');
+    } finally {
+      EasyLoading.dismiss();
+    }
   }
-}
 
   @override
   Widget build(BuildContext context) {
