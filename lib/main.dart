@@ -3830,17 +3830,17 @@ setState(() {});
       print('Mã $code chưa có trong danh sách → thêm mới');
       setState(() {
         assets.add({
-          'AssetClassCode': code,
-          'AssetItemCode': item['AssetItemCode'] ?? '',
-          'AssetClassName': item['AssetClassName'] ?? 'Không tên',
-          'DepartmentCode': item['DepartmentCode'] ?? '',
-          'DepartmentName': item['DepartmentName'] ?? 'Chưa có',
-          'LocationCode': item['LocationCode'] ?? '',
-          'quantity': item['quantity'] ?? '0',
-          'PhisUser': item['PhisUser'] ?? 'Chưa có',
-          'Vphis': '0',
-          'CreatedDate': 'Chưa kiểm kê',
-        });
+    'AssetClassCode': code,
+    'AssetItemCode': item['AssetItemCode'] ?? '',
+    'AssetClassName': item['AssetClassName'] ?? 'Không tên',
+    'DepartmentCode': item['DepartmentCode']?.toString().trim() ?? '',           // ← từ API search (sau khi sửa backend)
+    'DepartmentName': item['DepartmentName'] ?? 'Chưa có',
+    'LocationCode': item['LocationCode']?.toString().trim() ?? '',               // ← từ API search
+    'quantity': item['quantity']?.toString() ?? '0',
+    'PhisUser': item['PhisUser'] ?? 'Chưa có',
+    'Vphis': '0',
+    'CreatedDate': 'Chưa kiểm kê',
+  });
         final newCtrl = TextEditingController(text: '0');
         vphisControllers.add(newCtrl);
         existingIndex = assets.length - 1;
@@ -3875,8 +3875,8 @@ setState(() {});
     final name = item['AssetClassName'] ?? 'Không tên';
     final quantity = item['quantity'] ?? '0';
     final phisUser = item['PhisUser'] ?? 'Chưa có';
-    final location = item['LocationCode'] ?? '';
-    final dept = item['DepartmentCode'] ?? '';
+    final location = item['LocationCode']?.toString().trim() ?? '';
+    final dept     = item['DepartmentCode']?.toString().trim() ?? '';
     final createdDate = item['CreatedDate'] ?? 'Chưa kiểm kê';
 
     final ctrl = TextEditingController(
@@ -3955,15 +3955,15 @@ setState(() {});
 
     // Lưu vào server
     final saveData = {
-      'AssetClassCode': code,
-      'AssetItemCode': item['AssetItemCode'] ?? '',
-      'Vend': double.tryParse(quantity.toString().replaceAll(',', '.')) ?? 0.0,
-      'Vphis': vphis,
-      'LocationCode': location,
-      'DepartmentCode': dept,
-      'Vperiod': _currentVPeriod,
-      'CreatedBy': 'MobileApp',
-    };
+  'AssetClassCode': code,
+  'AssetItemCode': item['AssetItemCode'] ?? '',
+  'Vend': double.tryParse(quantity.toString().replaceAll(',', '.')) ?? 0.0,
+  'Vphis': vphis,
+  'LocationCode': location.isNotEmpty ? location : null,          // ← đảm bảo không gửi chuỗi rỗng
+  'DepartmentCode': dept.isNotEmpty ? dept : null,
+  'Vperiod': _currentVPeriod,
+  'CreatedBy': 'AppQr',
+};
 
     EasyLoading.show(status: 'Đang lưu...');
     try {

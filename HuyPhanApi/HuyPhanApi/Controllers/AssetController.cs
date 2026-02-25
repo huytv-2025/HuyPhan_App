@@ -258,64 +258,68 @@ public async Task<IActionResult> GetAssetPhysical(
         return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
     }
 }
-        // POST: api/asset-physical/search
         [HttpPost("search")]
-        public async Task<IActionResult> SearchAsset([FromBody] SearchAssetRequest request)
+public async Task<IActionResult> SearchAsset([FromBody] SearchAssetRequest request)
+{
+    if (string.IsNullOrWhiteSpace(request?.AssetCode))
+        return BadRequest(new { success = false, message = "Thiếu mã tài sản" });
+
+    try
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        const string sql = @"
+            SELECT 
+                a.AssetClassCode,
+                a.AssetItemCode,
+                dbo.fTCVNToUnicode(LTRIM(RTRIM(a.AssetClassName))) AS AssetClassName,
+                LTRIM(RTRIM(a.DepartmentCode))                AS DepartmentCode,
+                dbo.fTCVNToUnicode(dt.DepartmentName)         AS DepartmentName,
+                LTRIM(RTRIM(a.LocationCode))                  AS LocationCode,
+                dbo.fTCVNToUnicode(d.RVCName)                 AS LocationName,
+                ISNULL(a.Quantity, 0)                         AS quantity,     -- khớp với frontend
+                LTRIM(RTRIM(a.PhisLoc))                       AS PhisLoc,
+                LTRIM(RTRIM(a.PhisUser))                      AS PhisUser
+            FROM AssetItem a
+            LEFT JOIN DefRVCList d ON a.LocationCode = d.RVCNo
+            LEFT JOIN Department dt ON a.DepartmentCode = dt.DepartmentCode
+            WHERE a.AssetClassCode = @AssetClassCode";
+
+        await using var cmd = new SqlCommand(sql, connection);
+        cmd.Parameters.AddWithValue("@AssetClassCode", request.AssetCode.Trim());
+
+        await using var reader = await cmd.ExecuteReaderAsync();
+
+        var results = new List<Dictionary<string, object>>();
+
+        while (await reader.ReadAsync())
         {
-            if (string.IsNullOrWhiteSpace(request?.AssetCode))
-                return BadRequest(new { success = false, message = "Thiếu mã tài sản" });
-
-            try
+            results.Add(new Dictionary<string, object>
             {
-                await using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
-
-                const string sql = @"
-    SELECT 
-        a.AssetClassCode,
-        dbo.fTCVNToUnicode(LTRIM(RTRIM(a.AssetClassName))) AS AssetClassName,   -- ← XÓA () dư
-        dbo.fTCVNToUnicode(LTRIM(RTRIM(a.DepartmentCode))) AS DepartmentCode,
-        LTRIM(RTRIM(a.LocationCode)) AS LocationCode,
-        ISNULL(a.SlvgQty, 0) AS SlvgQty,
-        LTRIM(RTRIM(a.PhisLoc)) AS PhisLoc,
-        LTRIM(RTRIM(a.PhisUser)) AS PhisUser,
-        q.ImagePath
-    FROM AssetItem a
-    LEFT JOIN QRAsset q ON a.AssetClassCode = q.AssetClassCode and a.AssetItemCode = q.AssetItemCode
-    WHERE a.AssetClassCode = @AssetClassCode";
-
-                await using var cmd = new SqlCommand(sql, connection);
-                cmd.Parameters.AddWithValue("@AssetClassCode", request.AssetCode.Trim());
-
-                await using var reader = await cmd.ExecuteReaderAsync();
-
-                var results = new List<object>();
-
-                while (await reader.ReadAsync())
-                {
-                    results.Add(new
-                    {
-                        assetClassCode  = reader.GetSafeString("AssetClassCode"),
-                        assetClassName  = reader.GetSafeString("AssetClassName") ?? "Không tên",
-                        departmentCode  = reader.GetSafeString("DepartmentCode"),
-                        locationCode    = reader.GetSafeString("LocationCode"),
-                        slvgQty         = reader.GetSafeDecimal("SlvgQty"),
-                        phisLoc         = reader.GetSafeString("PhisLoc"),
-                        phisUser        = reader.GetSafeString("PhisUser"),
-                        imagePath       = reader.GetSafeString("ImagePath")
-                    });
-                }
-
-                if (results.Count == 0)
-                    return Ok(new { success = false, message = "Không tìm thấy tài sản", data = new List<object>() });
-
-                return Ok(new { success = true, data = results });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = $"Lỗi tìm kiếm: {ex.Message}" });
-            }
+                ["AssetClassCode"]   = reader.GetSafeString("AssetClassCode"),
+                ["AssetItemCode"]    = reader.GetSafeString("AssetItemCode"),
+                ["AssetClassName"]   = reader.GetSafeString("AssetClassName") ?? "Không tên",
+                ["DepartmentCode"]   = reader.GetSafeString("DepartmentCode"),
+                ["DepartmentName"]   = reader.GetSafeString("DepartmentName") ?? "Chưa có",
+                ["LocationCode"]     = reader.GetSafeString("LocationCode"),
+                ["LocationName"]     = reader.GetSafeString("LocationName") ?? "Không tên",
+                ["quantity"]         = reader.GetSafeDecimal("quantity"),
+                ["PhisLoc"]          = reader.GetSafeString("PhisLoc"),
+                ["PhisUser"]         = reader.GetSafeString("PhisUser"),
+            });
         }
+
+        if (results.Count == 0)
+            return Ok(new { success = false, message = "Không tìm thấy tài sản", data = new List<object>() });
+
+        return Ok(new { success = true, data = results });
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, new { success = false, message = $"Lỗi tìm kiếm: {ex.Message}" });
+    }
+}
 
         private async Task<int> CalculateBadgeCount()
         {

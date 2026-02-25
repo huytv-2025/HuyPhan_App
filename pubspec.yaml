@@ -47,5 +47,7 @@ flutter_launcher_icons:
 
 flutter_native_splash:
   # Bạn có thể thêm config splash ở đây nếu cần
-  color: "#00acc1"
+  color: "#ffffff"
   image: "assets/images/app_icon.png"
+  android: true
+  ios: true
