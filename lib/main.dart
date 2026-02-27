@@ -3824,16 +3824,16 @@ setState(() {});
     }
 
     // Lưu vào server – dùng dữ liệu từ assets
-  final saveData = {
-    'AssetClassCode': code,
-    'AssetItemCode': assetItem['AssetItemCode'] ?? '',
-    'Vend': double.tryParse(quantity.toString().replaceAll(',', '.')) ?? 0.0,
-    'Vphis': vphis,
-    'LocationCode': location.isNotEmpty ? location : null,
-    'DepartmentCode': dept.isNotEmpty ? dept : null,
-    'Vperiod': _currentVPeriod,
-    'CreatedBy': 'AppQr',
-  };
+      final saveData = {
+      'AssetClassCode': code,
+      'AssetItemCode': assetItem['AssetItemCode'] ?? '',
+      'Vend': double.tryParse(quantity.toString().replaceAll(',', '.')) ?? 0.0,
+      'Vphis': vphis,
+      'LocationCode': location,               // ← không cần kiểm tra isNotEmpty
+      'DepartmentCode': dept,                 // ← không cần kiểm tra isNotEmpty
+      'Vperiod': _currentVPeriod,
+      'CreatedBy': 'MobileApp',               // ← sửa thành cùng giá trị
+    };
 
     EasyLoading.show(status: 'Đang lưu...');
     try {
