@@ -1710,7 +1710,20 @@ class _InventoryImageManagerState extends State<InventoryImageManager> {
       ),
     );
   }
+Future<void> _printQRsToA4() async {
+  final codes = inventoryList
+      .map((e) => (e['Ivcode'] ?? '').trim())
+      .where((code) => code.isNotEmpty)
+      .toList();
 
+  if (codes.isEmpty) {
+    EasyLoading.showError('Không có mã hàng nào để in QR (danh sách đang trống)');
+    return;
+  }
+
+  print('→ In QR hàng hóa: ${codes.length} mã');
+  await _generateAndPrintPDF(codes, title: 'QR HÀNG HÓA', filenamePrefix: 'QR_HangHoa');
+}
   Future<void> _generateBatchQR() async {
     final ivcodes = inventoryList.where((item) {
       String vendStr = item['Vend'] ?? '0';
@@ -1754,87 +1767,7 @@ class _InventoryImageManagerState extends State<InventoryImageManager> {
       EasyLoading.showError('Lỗi: $e');
     }
   }
-Future<void> _printQRsToA4() async {
-    final codes = inventoryList
-        .map((e) => (e['Ivcode'] ?? '').toString())
-        .where((code) => code.isNotEmpty)
-        .toList();
 
-    if (codes.isEmpty) {
-      EasyLoading.showError('Không có mã hàng nào để in QR');
-      return;
-    }
-
-    final pdf = pw.Document();
-
-    const itemsPerPage = 8; // 2 cột × 4 hàng, bạn có thể đổi thành 6, 9, 12...
-    const qrSize = 140.0;
-
-    for (int i = 0; i < codes.length; i += itemsPerPage) {
-      final pageCodes = codes.sublist(
-        i,
-        (i + itemsPerPage).clamp(0, codes.length),
-      );
-
-      pdf.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(32),
-          build: (pw.Context context) {
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  'QR Hàng hóa - Huy Phan App',
-                  style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-                ),
-                pw.SizedBox(height: 20),
-                pw.GridView(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 20,
-                  crossAxisSpacing: 20,
-                  childAspectRatio: 0.9,
-                  children: pageCodes.map((code) {
-                    return pw.Column(
-                      mainAxisSize: pw.MainAxisSize.min,
-                      children: [
-                        pw.BarcodeWidget(
-                          barcode: pw.Barcode.qrCode(
-                            
-                          ),
-                          data: 'HPAPP:$code',
-                          width: qrSize,
-                          height: qrSize,
-                          drawText: false,
-                        ),
-                        pw.SizedBox(height: 8),
-                        pw.Text(
-                          code,
-                          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-                        ),
-                        pw.Text(
-                          'Huy Phan App',
-                          style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
-                        ),
-                      ],
-                    );
-                  }).toList(),
-                ),
-              ],
-            );
-          },
-        ),
-      );
-    }
-
-    // Mở hộp thoại preview và in
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'QR_HangHoa_${DateTime.now().toString().substring(0, 10)}.pdf',
-    );
-
-    EasyLoading.showSuccess('Đã mở preview in QR hàng hóa (chọn máy in A4)');
-  }
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -2347,6 +2280,20 @@ class _AssetImageManagerState extends State<AssetImageManager> {
     print('Lỗi chi tiết: $e');
   }
 }
+Future<void> _printQRsToA4() async {
+  final codes = assetList
+      .map((e) => (e['AssetClassCode'] ?? '').trim())
+      .where((code) => code.isNotEmpty)
+      .toList();
+
+  if (codes.isEmpty) {
+    EasyLoading.showError('Không có mã TSCĐ nào để in QR (danh sách đang trống)');
+    return;
+  }
+
+  print('→ In QR TSCĐ: ${codes.length} mã');
+  await _generateAndPrintPDF(codes, title: 'QR TÀI SẢN CỐ ĐỊNH & CCDC', filenamePrefix: 'QR_TSCD');
+}
   void _showQRDialog(String code, String name) {
     final qrData = 'HPAPP:$code';
     showDialog(
@@ -2614,93 +2561,14 @@ class _AssetImageManagerState extends State<AssetImageManager> {
       ],
     );
   }
-Future<void> _printQRsToA4() async {
-    final codes = assetList
-        .map((e) => (e['Ivcode'] ?? '').toString())
-        .where((code) => code.isNotEmpty)
-        .toList();
 
-    if (codes.isEmpty) {
-      EasyLoading.showError('Không có mã hàng nào để in QR');
-      return;
-    }
-
-    final pdf = pw.Document();
-
-    const itemsPerPage = 8; // 2 cột × 4 hàng, bạn có thể đổi thành 6, 9, 12...
-    const qrSize = 140.0;
-
-    for (int i = 0; i < codes.length; i += itemsPerPage) {
-      final pageCodes = codes.sublist(
-        i,
-        (i + itemsPerPage).clamp(0, codes.length),
-      );
-
-      pdf.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(32),
-          build: (pw.Context context) {
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  'QR Hàng hóa - Huy Phan App',
-                  style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-                ),
-                pw.SizedBox(height: 20),
-                pw.GridView(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 20,
-                  crossAxisSpacing: 20,
-                  childAspectRatio: 0.9,
-                  children: pageCodes.map((code) {
-                    return pw.Column(
-                      mainAxisSize: pw.MainAxisSize.min,
-                      children: [
-                        pw.BarcodeWidget(
-                          barcode: pw.Barcode.qrCode(
-                            
-                          ),
-                          data: 'HPAPP:$code',
-                          width: qrSize,
-                          height: qrSize,
-                          drawText: false,
-                        ),
-                        pw.SizedBox(height: 8),
-                        pw.Text(
-                          code,
-                          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-                        ),
-                        pw.Text(
-                          'Huy Phan App',
-                          style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
-                        ),
-                      ],
-                    );
-                  }).toList(),
-                ),
-              ],
-            );
-          },
-        ),
-      );
-    }
-
-    // Mở hộp thoại preview và in
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'QR_HangHoa_${DateTime.now().toString().substring(0, 10)}.pdf',
-    );
-
-    EasyLoading.showSuccess('Đã mở preview in QR hàng hóa (chọn máy in A4)');
-  }
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
 }
+
 // ================== MÀN HÌNH KIỂM KÊ VẬT LÝ - 2 TAB ==================
 class PhysicalInventoryScreen extends StatefulWidget {
   const PhysicalInventoryScreen({super.key});
@@ -3871,13 +3739,15 @@ setState(() {});
   Future<void> _showVphisInputDialog(Map<String, dynamic> item, int existingIndex) async {
     if (!mounted) return; // An toàn: không show nếu widget đã dispose
 
-    final code = item['AssetClassCode'] ?? item['assetClassCode'] ?? '';
-    final name = item['AssetClassName'] ?? 'Không tên';
-    final quantity = item['quantity'] ?? '0';
-    final phisUser = item['PhisUser'] ?? 'Chưa có';
-    final location = item['LocationCode']?.toString().trim() ?? '';
-    final dept     = item['DepartmentCode']?.toString().trim() ?? '';
-    final createdDate = item['CreatedDate'] ?? 'Chưa kiểm kê';
+    final assetItem = assets[existingIndex];  // ← Đây là item đã thêm vào danh sách
+
+  final code = assetItem['AssetClassCode'] ?? '';
+  final name = assetItem['AssetClassName'] ?? 'Không tên';
+  final quantity = assetItem['quantity'] ?? '0';
+  final phisUser = assetItem['PhisUser'] ?? 'Chưa có';
+  final location = assetItem['LocationCode']?.toString().trim() ?? '';     // ← Lấy từ assets
+  final dept     = assetItem['DepartmentCode']?.toString().trim() ?? '';   // ← Lấy từ assets
+  final createdDate = assetItem['CreatedDate'] ?? 'Chưa kiểm kê';
 
     final ctrl = TextEditingController(
       text: vphisControllers[existingIndex].text.isNotEmpty 
@@ -3953,17 +3823,17 @@ setState(() {});
       return;
     }
 
-    // Lưu vào server
-    final saveData = {
-  'AssetClassCode': code,
-  'AssetItemCode': item['AssetItemCode'] ?? '',
-  'Vend': double.tryParse(quantity.toString().replaceAll(',', '.')) ?? 0.0,
-  'Vphis': vphis,
-  'LocationCode': location.isNotEmpty ? location : null,          // ← đảm bảo không gửi chuỗi rỗng
-  'DepartmentCode': dept.isNotEmpty ? dept : null,
-  'Vperiod': _currentVPeriod,
-  'CreatedBy': 'AppQr',
-};
+    // Lưu vào server – dùng dữ liệu từ assets
+  final saveData = {
+    'AssetClassCode': code,
+    'AssetItemCode': assetItem['AssetItemCode'] ?? '',
+    'Vend': double.tryParse(quantity.toString().replaceAll(',', '.')) ?? 0.0,
+    'Vphis': vphis,
+    'LocationCode': location.isNotEmpty ? location : null,
+    'DepartmentCode': dept.isNotEmpty ? dept : null,
+    'Vperiod': _currentVPeriod,
+    'CreatedBy': 'AppQr',
+  };
 
     EasyLoading.show(status: 'Đang lưu...');
     try {
@@ -4464,4 +4334,81 @@ setState(() {});
     cameraController.dispose();
     super.dispose();
   }
+}
+Future<void> _generateAndPrintPDF(
+  List<String> codes, {
+  required String title,
+  required String filenamePrefix,
+}) async {
+  final pdf = pw.Document();
+  const itemsPerPage = 8;
+  const qrSize = 140.0;
+
+  for (int i = 0; i < codes.length; i += itemsPerPage) {
+    final pageCodes = codes.sublist(
+      i,
+      (i + itemsPerPage).clamp(0, codes.length),
+    );
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                title,
+                style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.Text(
+                'Huy Phan App • ${DateTime.now().toString().substring(0, 10)}',
+                style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700),
+              ),
+              pw.SizedBox(height: 24),
+              pw.GridView(
+                crossAxisCount: 2,
+                mainAxisSpacing: 20,
+                crossAxisSpacing: 20,
+                childAspectRatio: 1.0,
+                children: pageCodes.map((code) {
+                  return pw.Column(
+                    mainAxisSize: pw.MainAxisSize.min,
+                    mainAxisAlignment: pw.MainAxisAlignment.center,
+                    children: [
+                      pw.BarcodeWidget(
+                        barcode: pw.Barcode.qrCode(),
+                        data: 'HPAPP:$code',
+                        width: qrSize,
+                        height: qrSize,
+                        drawText: false,
+                      ),
+                      pw.SizedBox(height: 8),
+                      pw.Text(
+                        code,
+                        style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                        textAlign: pw.TextAlign.center,
+                      ),
+                      pw.Text(
+                        'Huy Phan App',
+                        style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  await Printing.layoutPdf(
+    onLayout: (PdfPageFormat format) async => pdf.save(),
+    name: '${filenamePrefix}_${DateTime.now().toString().substring(0, 10)}.pdf',
+  );
+
+  EasyLoading.showSuccess('Đã mở preview in A4 (${codes.length} mã QR)');
 }
