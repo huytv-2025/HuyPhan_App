@@ -2825,8 +2825,15 @@ class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
 
     print('Status: ${response.statusCode} | Body: ${response.body.substring(0, response.body.length.clamp(0, 500))}...');
 
+    if (response.statusCode == 404) {
+      setState(() => _scanMessage = 'Không tìm thấy sản phẩm với mã $ivcode');
+      EasyLoading.showInfo('Mã $ivcode không tồn tại trong hệ thống');
+      return;
+    }
+
     if (response.statusCode != 200) {
-      setState(() => _scanMessage = 'Lỗi server: ${response.statusCode}');
+      setState(() => _scanMessage = 'Lỗi kết nối server (${response.statusCode})');
+      EasyLoading.showError('Lỗi server: ${response.statusCode}');
       return;
     }
 
