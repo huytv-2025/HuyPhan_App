@@ -2164,7 +2164,19 @@ class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
       if (systemResponse.statusCode != 200) throw Exception('Lỗi tải tồn kho');
       final List<dynamic> systemRaw = jsonDecode(systemResponse.body);
       systemInventory = systemRaw.map((e) => Map<String, dynamic>.from(e)).toList();
-
+// ── THÊM ĐOẠN NÀY ──
+      print('=== DEBUG API /inventory ===');
+      print('Status code: ${systemResponse.statusCode}');
+      print('Số lượng item từ server: ${systemInventory.length}');
+      if (systemInventory.isNotEmpty) {
+       
+        print('Keys có sẵn: ${systemInventory[0].keys.toList()}');
+        print('period / Vperiod: ${systemInventory[0]['period']} / ${systemInventory[0]['Vperiod']}');
+        print('rvc / locationCode: ${systemInventory[0]['rvc']} / ${systemInventory[0]['locationCode']}');
+        print('quantity / vend: ${systemInventory[0]['quantity']} / ${systemInventory[0]['vend']}');
+      } else {
+        print('API trả về rỗng hoặc không phải List');
+      }
       if (selectedVperiod.isEmpty && systemInventory.isNotEmpty) {
         final periods = systemInventory
             .map((e) => e['period']?.toString().trim() ?? e['Vperiod']?.toString().trim() ?? '')
@@ -2205,14 +2217,21 @@ class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
       }
 
       displayedItems = systemInventory.where((sys) {
-        bool match = true;
-        if (selectedVperiod.isNotEmpty) {
-          match &= (sys['period'] ?? sys['Vperiod'] ?? '') == selectedVperiod;
-        }
-        if (selectedRVC.isNotEmpty) {
-          match &= (sys['locationCode'] ?? sys['rvc'] ?? '') == selectedRVC;
-        }
-        return match;
+  bool match = true;
+
+  final sysPeriod = (sys['period'] ?? sys['Vperiod'] ?? '').toString().trim();
+  final sysRvc    = (sys['rvc'] ?? sys['locationCode'] ?? '').toString().trim();
+
+  if (selectedVperiod.isNotEmpty) {
+    match &= sysPeriod == selectedVperiod.trim();
+  }
+
+  // Chỉ filter kho nếu người dùng đã chọn kho cụ thể (không phải mặc định rỗng hoặc '110')
+  if (selectedRVC.isNotEmpty && selectedRVC != '110') {  // ← thêm điều kiện này
+    match &= sysRvc == selectedRVC.trim();
+  }
+
+  return match;
       }).map((sys) {
         final key = '${sys['ivcode'] ?? sys['code']?.toString().trim()}_${sys['rvc'] ?? sys['locationCode']?.toString().trim()}_${sys['period'] ?? sys['Vperiod']?.toString().trim()}';
         final phys = physicalMap[key];
