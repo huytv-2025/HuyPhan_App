@@ -101,90 +101,103 @@ public async Task<IActionResult> SavePhysicalInventory([FromBody] SavePhysicalRe
         return StatusCode(500, new { success = false, message = $"Lỗi server: {ex.Message}" });
     }
 }
-        [HttpGet("get")]
-public async Task<IActionResult> GetPhysicalInventory(
+        [HttpGet]   // Giữ nguyên [HttpGet] vì Flutter đang gọi /api/invphysical
+public async Task<IActionResult> Get(
     [FromQuery] string? vperiod = null,
     [FromQuery] string? rvc = null)
 {
     try
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-// Bước 1: Xác định filterVPeriod (tự lấy INVPeriod mới nhất nếu không gửi param)
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        // Bước 1: Xác định kỳ lọc (nếu không gửi → lấy kỳ lớn nhất từ GlobPara hoặc max trong Inventory)
         string filterVPeriod;
         if (string.IsNullOrWhiteSpace(vperiod))
         {
+            // Cách 1: Lấy từ GlobPara (nếu bạn dùng bảng này để lưu kỳ hiện hành)
             const string getLatestSql = @"
                 SELECT TOP 1 ParaStr 
                 FROM GlobPara 
                 WHERE ParaName = 'INVPeriod'";
 
-            await using var cmdLatest = new SqlCommand(getLatestSql, connection);
+            await using var cmdLatest = new SqlCommand(getLatestSql, conn);
             var latest = await cmdLatest.ExecuteScalarAsync();
-            filterVPeriod = latest?.ToString()?.Trim() ?? DateTime.Now.ToString("yyyyMM");
+            filterVPeriod = latest?.ToString()?.Trim();
+
+            // Nếu GlobPara không có → fallback lấy kỳ max từ bảng Inventory
+            if (string.IsNullOrWhiteSpace(filterVPeriod))
+            {
+                const string getMaxPeriod = "SELECT MAX(Vperiod) FROM Inventory";
+                await using var cmdMax = new SqlCommand(getMaxPeriod, conn);
+                filterVPeriod = (await cmdMax.ExecuteScalarAsync())?.ToString()?.Trim() 
+                    ?? DateTime.Now.ToString("yyyyMM");
+            }
         }
         else
         {
             filterVPeriod = vperiod.Trim();
         }
+
         var sql = @"
             SELECT 
-                Ivcode,
-                Vend,
-                Vphis,
-                RVC,
-                Vperiod,
-                CreatedDate,          -- ← Thêm trường này
-                CreatedBy             -- ← Optional: nếu muốn hiển thị người tạo luôn
-            FROM QRInvPhisical
-            WHERE IsActive = 1";
+                i.Vicode          AS ivcode,
+                i.RVC             AS rvc,
+                dbo.fTCVNToUnicode(l.RVCName)         AS rvcname,
+                i.vEnd            AS quantity,          -- Tồn hệ thống
+                i.Vperiod         AS period,
+                ISNULL(NULLIF(TRIM(d.IName), ''), 'Không có tên') AS name,              -- ← TÊN HÀNG từ bảng DefItem (hoặc bảng sản phẩm của bạn)
+                p.Vphis           AS vphis,             -- ← Tồn vật lý từ QRInvPhisical
+                p.CreatedDate     AS createdDate        -- ← Ngày kiểm kê
+            FROM Inventory i
+            LEFT JOIN DefRVCList l ON i.RVC = l.RVCNo
+            LEFT JOIN ItemDef d ON i.VICode = d.ICode   -- ← JOIN bảng sản phẩm để lấy tên (đổi tên bảng nếu khác)
+            LEFT JOIN QRInvPhisical p ON 
+                p.Ivcode = i.Vicode 
+                AND p.RVC = i.RVC 
+                AND p.Vperiod = i.Vperiod
+            WHERE i.Vperiod = @Vperiod";  // ← Luôn lọc theo kỳ đã xác định
 
-        var parameters = new List<SqlParameter>();
-
-        if (!string.IsNullOrWhiteSpace(vperiod))
+        var parameters = new List<SqlParameter>
         {
-            sql += " AND Vperiod = @Vperiod";
-            parameters.Add(new SqlParameter("@Vperiod", vperiod.Trim()));
-        }
+            new SqlParameter("@Vperiod", filterVPeriod)
+        };
 
         if (!string.IsNullOrWhiteSpace(rvc))
         {
-            sql += " AND RVC = @RVC";
+            sql += " AND i.RVC = @RVC";
             parameters.Add(new SqlParameter("@RVC", rvc.Trim()));
         }
 
-        sql += " ORDER BY Vperiod DESC, Ivcode";
+        sql += " ORDER BY i.Vicode";
 
-        await using var cmd = new SqlCommand(sql, connection);
-        foreach (var p in parameters)
-        {
-            cmd.Parameters.Add(p);
-        }
+        await using var cmd = new SqlCommand(sql, conn);
+        foreach (var p in parameters) cmd.Parameters.Add(p);
 
         await using var reader = await cmd.ExecuteReaderAsync();
-
-        var results = new List<Dictionary<string, object>>();
+        var list = new List<Dictionary<string, object>>();
 
         while (await reader.ReadAsync())
         {
-            results.Add(new Dictionary<string, object>
+            var row = new Dictionary<string, object>();
+            for (int i = 0; i < reader.FieldCount; i++)
             {
-                ["ivcode"]      = reader["Ivcode"],
-                ["vend"]        = reader["Vend"],
-                ["vphis"]       = reader["Vphis"] is decimal d ? d : 0m,
-                ["rvc"]         = reader["RVC"],
-                ["vperiod"]     = reader["Vperiod"],
-                ["createdDate"] = reader.IsDBNull(reader.GetOrdinal("CreatedDate")) 
-    ? null 
-    : ((DateTime)reader["CreatedDate"]).ToString("dd/MM/yyyy HH:mm"),  // ← Format đẹp
-                ["createdBy"]   = reader["CreatedBy"] ?? "Unknown"  // Optional
-            });
+                var key = reader.GetName(i).ToLowerInvariant();
+                row[key] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+            }
+            list.Add(row);
         }
 
-        return Ok(results);
+        // Trả thêm thông tin kỳ đang dùng (để Flutter hiển thị)
+        return Ok(new 
+        {
+            data = list,
+            currentVperiod = filterVPeriod
+        });
     }
     catch (Exception ex)
     {
+        Console.WriteLine($"Lỗi API invphysical/get: {ex}");
         return StatusCode(500, new { success = false, message = ex.Message });
     }
 }

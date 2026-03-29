@@ -10,6 +10,12 @@
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">  <!-- Chỉ để 1 dòng này là đủ cho test -->
 
+
+<meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
+
+            
         <activity
             android:name=".MainActivity"
             android:exported="true"

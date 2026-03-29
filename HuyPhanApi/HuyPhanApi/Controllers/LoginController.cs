@@ -125,6 +125,22 @@ private async Task CreateTablesIfNotExists(SqlConnection connection)
                 ) ON [PRIMARY]
             END
         ",
+// 2. QRItem
+        @"
+            IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[QRInvPhisical]') AND type in (N'U'))
+            BEGIN
+                            CREATE TABLE [dbo].[QRItem](
+                [Id] [int] IDENTITY(1,1) NOT NULL,
+                [Ivcode] [nvarchar](50) NOT NULL,
+                [QRCode] [nvarchar](255) NOT NULL,
+                [CreatedDate] [datetime] NOT NULL,
+                [CreatedBy] [nvarchar](50) NOT NULL,
+                [IsActive] [bit] NOT NULL,
+                [ImagePath] [nvarchar](255) NULL,
+            PRIMARY KEY CLUSTERED 
+                ) ON [PRIMARY]
+            END
+        ",
 
         // 3. QRAsset
         @"
