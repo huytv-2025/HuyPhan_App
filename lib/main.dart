@@ -2169,15 +2169,17 @@ class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
 
     // Tự động chọn kỳ
     if (selectedVperiod.isEmpty && systemInventory.isNotEmpty) {
-      final periods = systemInventory
-          .map((e) => (e['period'] ?? e['Vperiod'] ?? '0').toString().trim())
-          .where((p) => p.isNotEmpty && p.length == 6)
-          .toSet()
-          .toList()
-        ..sort((a, b) => b.compareTo(a));
-      if (periods.isNotEmpty) selectedVperiod = periods.first;
-    }
+        final periods = systemInventory
+            .map((e) => (e['period'] ?? e['Vperiod'] ?? '0').toString().trim())
+            .where((p) => p.isNotEmpty && p.length == 6)
+            .toSet()
+            .toList()
+          ..sort((a, b) => b.compareTo(a));
 
+        if (periods.isNotEmpty) {
+          selectedVperiod = periods.first;
+        }
+    }
     // ================== XỬ LÝ TỒN VẬT LÝ (SỬA Ở ĐÂY) ==================
     var physUrl = '$baseUrl/api/invphysical';
     final query = <String, String>{};
