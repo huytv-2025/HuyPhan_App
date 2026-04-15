@@ -2126,7 +2126,11 @@ class _InventoryPhysicalTabState extends State<InventoryPhysicalTab> {
       }
     });
   }
-
+      // Hàm siêu đơn giản & an toàn - dùng ở mọi nơi
+      String toSafeString(dynamic value) {
+        if (value == null) return '';
+        return value.toString().trim();
+      }
   Future<void> _loadRvcList() async {
   try {
     final res = await http.get(Uri.parse('$baseUrl/api/inventory/locations'));
@@ -2463,29 +2467,43 @@ String? _getItemName(Map<String, dynamic> item) {
       }
 
       final List items = data['data'];
-      final matched = items.firstWhere((it) {
-        final p = (it['period'] ?? it['Vperiod'] ?? 0).toString().trim();  // ← ÉP int → String
-  final r = (it['rvc'] ?? it['locationCode'] ?? '').toString().trim();
-        bool ok = true;
-        if (selectedVperiod.isNotEmpty) ok &= p == selectedVperiod;
-        if (selectedRVC.isNotEmpty && selectedRVC != '110') ok &= r == selectedRVC;
-        return ok;
-      }, orElse: () => null);
 
-      if (matched == null) {
-        setState(() => _scanMessage = 'Mã không thuộc kỳ/kho hiện tại');
-        return;
-      }
+final matched = items.firstWhere((it) {
+  final p = toSafeString(it['period'] ?? it['Vperiod']);
+  final r = toSafeString(it['rvc'] ?? it['RVC'] ?? it['locationCode']);
+  
+  bool ok = true;
+  if (selectedVperiod.isNotEmpty) ok &= (p == selectedVperiod);
+  if (selectedRVC.isNotEmpty && selectedRVC != '110') ok &= (r == selectedRVC);
+  
+  return ok;
+}, orElse: () => null);
 
-      final item = Map<String, dynamic>.from(matched);
-      final ivcode = (item['ivcode'] ?? item['code'] ?? '').trim();
-      final rvc = (item['rvc'] ?? item['locationCode'] ?? '').trim();
-      final vperiod = (item['Vperiod'] ?? item['period'] ?? '').trim();
+if (matched == null) {
+  setState(() => _scanMessage = 'Mã không thuộc kỳ/kho hiện tại');
+  return;
+}
 
-      final idx = displayedItems.indexWhere((e) {
-  final eCode   = (e['ivcode'] ?? e['code'] ?? e['Ivcode'] ?? 0).toString().trim();
-  final eRvc    = (e['rvc']    ?? e['locationCode'] ?? e['RVC'] ?? '').toString().trim();
-  final ePeriod = (e['period'] ?? e['Vperiod'] ?? 0).toString().trim();
+// ================== SỬA TỪ ĐÂY ==================
+final item = Map<String, dynamic>.from(matched);
+
+// Chuẩn hóa tất cả các trường quan trọng ngay từ đầu (để tránh lỗi trim trên int)
+item['ivcode']   = toSafeString(item['ivcode'] ?? item['code'] ?? item['Ivcode']);
+item['rvc']      = toSafeString(item['rvc'] ?? item['RVC'] ?? item['locationCode']);
+item['Vperiod']  = toSafeString(item['Vperiod'] ?? item['period'] ?? item['vperiod']);
+item['name']     = toSafeString(item['name'] ?? item['IName'] ?? item['iname'] ?? 'Không tên');
+item['rvcname']  = toSafeString(item['rvcname'] ?? item['locationName']);
+
+// Dùng lại các biến đã chuẩn hóa (rất sạch và an toàn)
+final ivcode   = item['ivcode'];
+final rvc      = item['rvc'];
+final vperiod  = item['Vperiod'];
+
+// Tìm index trong danh sách hiện tại
+final idx = displayedItems.indexWhere((e) {
+  final eCode   = toSafeString(e['ivcode'] ?? e['code'] ?? e['Ivcode']);
+  final eRvc    = toSafeString(e['rvc'] ?? e['locationCode'] ?? e['RVC']);
+  final ePeriod = toSafeString(e['period'] ?? e['Vperiod']);
 
   return eCode == ivcode && eRvc == rvc && ePeriod == vperiod;
 });

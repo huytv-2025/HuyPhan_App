@@ -33,12 +33,12 @@ namespace HuyPhanApi.Controllers
                         i.Vicode          AS ivcode,
                         dbo.fTCVNToUnicode(f.IName)          AS name,
                         i.RVC             AS rvc,
-                        dbo.fTCVNToUnicode(l.RVCName)         AS rvcname,          -- ← Thêm tên kho
+                        dbo.fTCVNToUnicode(l.RVCName)         AS rvcname,
                         i.vEnd            AS quantity,
                         i.Vperiod         AS period
                     FROM Inventory i
                     LEFT JOIN DefRVCList l ON i.RVC = l.RVCNo
-                    LEFT JOIN ItemDef f ON i.VICode = f.ICode       -- ← Join bảng kho (đúng tên bảng bạn dùng)
+                    LEFT JOIN ItemDef f ON i.VICode = f.ICode
                     WHERE 1=1";
 
                 var parameters = new List<SqlParameter>();
@@ -125,5 +125,73 @@ namespace HuyPhanApi.Controllers
                 return StatusCode(500, new { success = false, message = ex.Message });
             }
         }
+
+        // ================== ENDPOINT QUÉT QR - THÊM VÀO ĐÂY ==================
+        [HttpPost("search")]
+        public async Task<IActionResult> SearchByQR([FromBody] QRSearchRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request?.QRCode))
+            {
+                return BadRequest(new { success = false, message = "QRCode không được để trống" });
+            }
+
+            try
+            {
+                await using var conn = new SqlConnection(_connectionString);
+                await conn.OpenAsync();
+
+                const string sql = @"
+                    SELECT TOP 50
+                        i.Vicode                                      AS ivcode,
+                        i.RVC                                         AS rvc,
+                        i.Vperiod                                     AS period,
+                        i.vEnd                                        AS quantity,
+                        dbo.fTCVNToUnicode(l.RVCName)                 AS rvcname,
+                        ISNULL(NULLIF(TRIM(f.IName), ''), 'Không có tên') AS name,
+                        ISNULL(NULLIF(TRIM(f.ICode), ''), i.Vicode)   AS code,
+                        ''                                            AS imagePath
+                    FROM Inventory i
+                    LEFT JOIN DefRVCList l ON i.RVC = l.RVCNo
+                    LEFT JOIN ItemDef f ON i.VICode = f.ICode
+                    WHERE (i.Vicode = @QRCode OR f.ICode = @QRCode)
+                    ORDER BY i.Vperiod DESC, i.Vicode";
+
+                await using var cmd = new SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@QRCode", request.QRCode.Trim());
+
+                await using var reader = await cmd.ExecuteReaderAsync();
+
+                var list = new List<Dictionary<string, object>>();
+
+                while (await reader.ReadAsync())
+                {
+                    var row = new Dictionary<string, object>();
+                    for (int i = 0; i < reader.FieldCount; i++)
+                    {
+                        var key = reader.GetName(i).ToLowerInvariant();
+                        row[key] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                    }
+                    list.Add(row);
+                }
+
+                return Ok(new 
+                { 
+                    success = true, 
+                    data = list,
+                    message = list.Count > 0 ? $"Tìm thấy {list.Count} kết quả" : "Không tìm thấy sản phẩm với mã này"
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Lỗi SearchByQR: {ex.Message}\n{ex.StackTrace}");
+                return StatusCode(500, new { success = false, message = "Lỗi server khi tìm kiếm QR" });
+            }
+        }
+    }
+
+    // ====================== MODEL HỖ TRỢ ======================
+    public class QRSearchRequest
+    {
+        public string? QRCode { get; set; }
     }
 }
